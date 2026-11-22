@@ -149,4 +149,41 @@ describe("selectSkills with several capabilities", () => {
 		expect(selectSkills({ task: query ?? "", skills: catalog }).selected[0]?.name).toBe("python-testing");
 		expect(suggestionSkillQuery("plain user text")).toBeUndefined();
 	});
+
+	it("S7: an edited legacy v2/v3 prompt keeps the added instruction and no host wording selects a skill", () => {
+		const skills = [
+			...catalog,
+			{ name: "readme-docs", description: "Document configuration flags and usage in the README" },
+			{
+				name: "task-planning",
+				description: "Describe the first action and the completion criteria of a proposed task",
+			},
+			{ name: "run-report", description: "변경 경로, 실행한 명령과 종료 상태, 미검증 항목을 정리한 최종 보고" },
+		];
+		const facts = collectSuggestionFacts({
+			messages: [
+				{ role: "user", content: "add a retry", timestamp: 1 },
+				{ role: "assistant", content: [], stopReason: "stop" },
+			],
+			outcome: "completed",
+		});
+		const v3 = renderSuggestionPrompt(buildSuggestion(facts, "Add pytest regression tests for the upload handler"));
+		const v2 = [
+			"업로더 pytest 회귀 테스트를 추가해줘.",
+			"## 입력",
+			"- 해결할 문제: 업로더 pytest 회귀 테스트를 추가해줘.",
+			"- 대상 범위: 미확인. 대상 파일이나 모듈을 먼저 특정",
+			"## 결과",
+			"- 최종 보고: 변경 경로, 실행한 명령과 종료 상태, 미검증 항목",
+		].join("\n");
+		const extra = "Also document the retry flag in the README";
+		for (const edited of [`${v3}\n${extra}`, `${v3} ${extra}`, `${v2}\n${extra}`, `${v2} ${extra}`]) {
+			const query = suggestionSkillQuery(edited) ?? edited;
+			expect(query).toContain(extra);
+			const names = selectSkills({ task: query, skills }).selected.map((skill) => skill.name);
+			expect(names).toContain("readme-docs");
+			expect(names).not.toContain("task-planning");
+			expect(names).not.toContain("run-report");
+		}
+	});
 });

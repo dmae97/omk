@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Editor.setPlaceholder()` and `Editor.setInlineSuggestion()` accept an optional `painted` callback, called once when a rendered frame first shows the text.
+
+### Fixed
+
+- Selecting a skill command in editor autocomplete inserts it without submitting, including a mid-message `/skill:` selection that keeps the existing request.
+
 ## [2.0.2] - 2026-11-21
 
 ## [2.0.1] - 2026-11-15

@@ -112,8 +112,105 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		expect(context.messages).toHaveLength(n);
 	});
 
+	it.each([false, true])("uses a matching Codex cache hit without bypassing other gates (caps=%s)", (capsOn) => {
+		const codex = {
+			...model,
+			provider: "openai-codex",
+			api: "openai-codex-responses" as const,
+			id: "gpt-6.2-astra",
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		const final = assistant("Done", {
+			provider: codex.provider,
+			api: codex.api,
+			model: codex.id,
+			usage: { ...assistant("").usage, cacheRead: 128 },
+		});
+		const turn = {
+			...base,
+			record: { ...record, model: codex },
+			currentModel: codex,
+			finalAssistant: final,
+			caps: capsOn
+				? { budget: { deadlineMs: 30000, maxReasoning: "inherit" as const, maxCostUsd: 0.02 } }
+				: undefined,
+		};
+		expect(planSuggestion(turn).kind).toBe("request");
+		expect(planSuggestion({ ...turn, usage: 90 })).toMatchObject({ reason: "near_usage_limit" });
+		expect(planSuggestion({ ...turn, nowMs: record.atMs + SHORT_CACHE_TTL_MS })).toMatchObject({
+			reason: "cache_cold",
+		});
+		expect(planSuggestion({ ...turn, record: { ...turn.record, options: { cacheRetention: "none" } } }).kind).toBe(
+			"skip",
+		);
+		expect(planSuggestion({ ...turn, finalAssistant: { ...final, model: "other" } }).kind).toBe("skip");
+		expect(planSuggestion({ ...turn, finalAssistant: { ...final, usage: assistant("").usage } }).kind).toBe("skip");
+	});
+
+	it.each(["length", "toolUse"] as const)("does not offer a %s reply as a Tab request", async (stopReason) => {
+		const reply = assistant("Run the remaining check", { stopReason });
+		const stream = (() => ({ result: async () => reply })) as never;
+		const result = await requestNextSuggestion(stream, record, base.finalAssistant, new AbortController().signal);
+		expect(result.outcome).toBe("empty");
+		expect(result.text).toBeUndefined();
+		expect(result.usage).toBe(reply.usage);
+	});
+
+	it.each(["gpt-6.2-sol", "gpt-6.2-astra"])("keeps the selected Codex overlay %s for a staged request", async (id) => {
+		const selected = { ...getModel("openai-codex", "gpt-5.3-codex-spark"), id };
+		const request = { ...record, model: selected };
+		const reply = "남은 회귀 검사를 실행해줘.";
+		const stream = ((received: unknown, ctx: Context) => {
+			expect(received).toBe(selected);
+			expect(ctx.messages.at(-2)).toBe(base.finalAssistant);
+			expect(JSON.stringify(ctx.messages.at(-1))).toContain("first unfinished step");
+			return { result: async () => assistant(reply, { api: selected.api, provider: selected.provider, model: id }) };
+		}) as never;
+		const result = await requestNextSuggestion(stream, request, base.finalAssistant, new AbortController().signal);
+		expect(result.text).toBe(reply);
+	});
+
 	it("plans a request for a fresh cached completed turn", () => {
 		expect(planSuggestion(base).kind).toBe("request");
+	});
+
+	it.each([false, true])("uses a matching Codex cache hit even with zero subscription pricing (caps=%s)", (on) => {
+		const codex = {
+			...model,
+			provider: "openai-codex",
+			api: "openai-codex-responses" as const,
+			id: "gpt-6.2-astra",
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		const final = assistant("Done.", {
+			provider: codex.provider,
+			api: codex.api,
+			model: codex.id,
+			usage: { ...base.finalAssistant.usage, cacheRead: 1024 },
+		});
+		const input = {
+			...base,
+			currentModel: codex,
+			record: { ...record, model: codex },
+			finalAssistant: final,
+			...(on ? { caps: { budget: { deadlineMs: 1000, maxCostUsd: 0.02, maxReasoning: "inherit" as const } } } : {}),
+		};
+		expect(planSuggestion(input).kind).toBe("request");
+		for (const override of [
+			{ provider: "openai" },
+			{ model: "other" },
+			{ api: "openai-responses" as const },
+			{ usage: { ...final.usage, cacheRead: 0 } },
+		]) {
+			expect(planSuggestion({ ...input, finalAssistant: { ...final, ...override } }).kind).toBe("skip");
+		}
+		expect(
+			planSuggestion({ ...input, record: { ...input.record, options: { cacheRetention: "none" } } }),
+		).toMatchObject({ reason: "no_cache_support" });
+		expect(planSuggestion({ ...input, usage: 90 })).toMatchObject({ reason: "near_usage_limit" });
+		expect(planSuggestion({ ...input, nowMs: record.atMs + SHORT_CACHE_TTL_MS })).toMatchObject({
+			reason: "cache_cold",
+		});
 	});
 
 	it.each([

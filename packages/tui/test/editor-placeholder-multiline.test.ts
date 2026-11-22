@@ -11,6 +11,18 @@ import { VirtualTerminal } from "./virtual-terminal.ts";
 const plain = (lines: readonly string[]) => lines.map((line) => stripVTControlCharacters(line).trimEnd());
 
 describe("multi-line editor placeholder", () => {
+	it("acknowledges a placeholder only once, when a visible frame includes it", () => {
+		const editor = new Editor(new TUI(new VirtualTerminal(60, 30)), defaultEditorTheme);
+		let paints = 0;
+		editor.setPlaceholder("candidate", () => paints++);
+		editor.setText("draft");
+		editor.render(60);
+		assert.equal(paints, 0);
+		editor.setText("");
+		assert.ok(plain(editor.render(60)).some((line) => line.includes("candidate")));
+		editor.render(60);
+		assert.equal(paints, 1);
+	});
 	it("leaves a single-line placeholder at exactly one editor row", () => {
 		const editor = new Editor(new TUI(new VirtualTerminal(60, 30)), defaultEditorTheme);
 		const empty = editor.render(60).length;

@@ -92,6 +92,8 @@ export interface TurnMetricInput {
 	readonly suggestionSkip?: SuggestionMetricSkipReason;
 	readonly estimatedCostUsd?: number;
 	readonly maxCostUsd?: number;
+	/** `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS` only: quota read time before the suggestion decision. */
+	readonly quotaReadMs?: number;
 }
 export interface TurnMetricRecord extends Omit<TurnMetricInput, "toolCalls"> {
 	readonly schemaVersion: typeof TURN_METRICS_SCHEMA_VERSION;
@@ -228,6 +230,7 @@ function project(value: unknown, source: "input" | "v1" | "v2"): TurnMetricRecor
 			: { suggestionSkip: member(input.suggestionSkip, SUGGESTION_SKIP_REASONS) }),
 		...(input.estimatedCostUsd === undefined ? {} : { estimatedCostUsd: quantity(input.estimatedCostUsd) }),
 		...(input.maxCostUsd === undefined ? {} : { maxCostUsd: quantity(input.maxCostUsd) }),
+		...(input.quotaReadMs === undefined ? {} : { quotaReadMs: quantity(input.quotaReadMs) }),
 	};
 }
 

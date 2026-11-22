@@ -6,8 +6,8 @@ export interface SuggestionEditorCursor {
 export interface SuggestionEditorPort {
 	getText(): string;
 	setText(text: string): void;
-	setPlaceholder(text: string): void;
-	setInlineSuggestion?(text: string): void;
+	setPlaceholder(text: string, painted?: () => void): void;
+	setInlineSuggestion?(text: string, painted?: () => void): void;
 	getCursor?(): SuggestionEditorCursor | undefined;
 	insertTextAtCursor?(text: string): void;
 	isShowingAutocomplete(): boolean;
@@ -66,17 +66,17 @@ export function followActiveEditor(getEditor: () => ActiveEditor, basePlaceholde
 			if (editor.insertTextAtCursor) editor.insertTextAtCursor(text);
 			else editor.setText(editor.getText() + text);
 		},
-		setInlineSuggestion: (text) => {
+		setInlineSuggestion: (text, painted) => {
 			const editor = current();
 			if (inlineShownOn && inlineShownOn !== editor) inlineShownOn.setInlineSuggestion?.("");
-			editor.setInlineSuggestion?.(text);
+			editor.setInlineSuggestion?.(text, painted);
 			inlineShownOn = text.length > 0 ? editor : undefined;
 		},
 		isShowingAutocomplete: () => current().isShowingAutocomplete?.() ?? false,
-		setPlaceholder: (text) => {
+		setPlaceholder: (text, painted) => {
 			const editor = current();
 			if (shownOn && shownOn !== editor) shownOn.setPlaceholder?.(basePlaceholder);
-			editor.setPlaceholder?.(text);
+			editor.setPlaceholder?.(text, painted);
 			shownOn = text === basePlaceholder ? undefined : editor;
 		},
 		get onBeforeInput() {

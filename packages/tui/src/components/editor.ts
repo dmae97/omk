@@ -12,7 +12,7 @@ import {
 	autocompleteSnapshotMatches,
 	buildAutocompleteList,
 } from "./editor-autocomplete.ts";
-import { formatEditorSuffix, formatPlaceholderContinuation } from "./editor-inline-suggestion.ts";
+import { EditorHints, formatPlaceholderContinuation } from "./editor-inline-suggestion.ts";
 import { createScrollBorder } from "./editor-scroll-border.ts";
 import type { SelectList, SelectListTheme } from "./select-list.ts";
 
@@ -246,9 +246,7 @@ export class Editor implements Component, Focusable {
 	private lastWidth: number = 80;
 
 	// Placeholder shown while the editor is empty
-	private placeholder: string = "";
-	// Inline suffix shown after the cursor at the document end
-	private inlineSuggestion: string = "";
+	private readonly hints = new EditorHints();
 
 	// Vertical scrolling support
 	private scrollOffset: number = 0;
@@ -483,7 +481,7 @@ export class Editor implements Component, Focusable {
 		// hardware cursor for IME candidate-window placement even while
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
-		const hint = { placeholder: this.placeholder, inlineSuggestion: this.inlineSuggestion, state: this.state };
+		const hint = { ...this.hints.text, state: this.state };
 		const hintView = { ...hint, autocompleteActive: this.autocompleteState !== null, style: this.theme.placeholder };
 
 		for (const layoutLine of visibleLines) {
@@ -519,7 +517,7 @@ export class Editor implements Component, Focusable {
 					}
 				}
 
-				const suffix = formatEditorSuffix({ ...hintView, availableWidth: contentWidth - lineVisibleWidth });
+				const suffix = this.hints.suffix({ ...hintView, availableWidth: contentWidth - lineVisibleWidth });
 				displayText += suffix.text;
 				lineVisibleWidth += suffix.width;
 			}
@@ -681,7 +679,8 @@ export class Editor implements Component, Focusable {
 					this.state.cursorLine = result.cursorLine;
 					this.setCursorCol(result.cursorCol);
 
-					if (this.autocompletePrefix.startsWith("/")) {
+					// Skill picks stay editable until the user adds the request and submits it.
+					if (this.autocompletePrefix.startsWith("/") && !/^!?skill:/.test(selected.value)) {
 						this.cancelAutocomplete();
 						// Fall through to submit
 					} else {
@@ -953,13 +952,13 @@ export class Editor implements Component, Focusable {
 	}
 
 	/** Set placeholder text rendered dim while the editor is empty. */
-	setPlaceholder(text: string): void {
-		this.placeholder = text;
+	setPlaceholder(text: string, painted?: () => void): void {
+		this.hints.set("placeholder", text, painted);
 	}
 
 	/** Set an inline suffix rendered dim at the document end; empty clears it. */
-	setInlineSuggestion(text: string): void {
-		this.inlineSuggestion = text;
+	setInlineSuggestion(text: string, painted?: () => void): void {
+		this.hints.set("inlineSuggestion", text, painted);
 	}
 
 	private expandPasteMarkers(text: string): string {
@@ -2338,7 +2337,7 @@ export class Editor implements Component, Focusable {
 	private cancelAutocomplete(): void {
 		this.cancelAutocompleteRequest();
 		this.clearAutocompleteUi();
-		this.inlineSuggestion = "";
+		this.hints.set("inlineSuggestion", "");
 	}
 
 	public isShowingAutocomplete(): boolean {

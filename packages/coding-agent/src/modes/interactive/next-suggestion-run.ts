@@ -3,6 +3,7 @@ import type { AssistantMessage } from "omk-ai";
 import type { AgentSession } from "../../core/agent-session.ts";
 import { wrapBudgetStream } from "../../core/budget-stream.ts";
 import {
+	MAX_SUGGESTION_CHARS,
 	planSuggestion,
 	type QuotaUsage,
 	type RecordedMainRequest,
@@ -11,14 +12,9 @@ import {
 } from "../../core/next-suggestion.ts";
 import type { SuggestionCandidateSource } from "../../core/next-suggestion-accept-trace.ts";
 import { isSuggestionCapsEnabled, suggestionBudgetFromEnv } from "../../core/next-suggestion-budget.ts";
+import type { ClearReason, DisplayReporter } from "../../core/next-suggestion-display-log.ts";
 import { collectSuggestionFacts, type SuggestionTurnOutcome } from "../../core/next-suggestion-facts.ts";
-import {
-	buildSuggestion,
-	isWellFormedSuggestionPrompt,
-	renderSuggestionPrompt,
-	sanitizeModelTask,
-	suggestionViolation,
-} from "../../core/next-suggestion-prompt.ts";
+import { sanitizeModelTask } from "../../core/next-suggestion-prompt.ts";
 import * as settlement from "../../core/next-suggestion-settlement.ts";
 import { RunBudget } from "../../core/run-budget.ts";
 import type { SubscriptionUsageReader } from "../../core/subscription-usage-reader.ts";
@@ -35,6 +31,7 @@ interface RunSettledSuggestionInput {
 	readonly record: RecordedMainRequest | undefined;
 	readonly finalAssistant: AssistantMessage | undefined;
 	readonly parentTurnIndex: number;
+	readonly cancelReason?: () => ClearReason | undefined;
 	readonly isCurrent: () => boolean;
 	readonly editorEmpty: () => boolean;
 	readonly pendingOwner: { pending: AbortController | undefined };
@@ -44,6 +41,7 @@ interface RunSettledSuggestionInput {
 export interface SuggestionShowTiming {
 	readonly parentTurnIndex: number;
 	readonly settledAtEpochMs: number;
+	readonly report?: DisplayReporter;
 	readonly quotaCheckedAtEpochMs: number;
 }
 
@@ -74,26 +72,29 @@ export interface ComposeSuggestionInput {
 }
 
 /**
- * Build the suggestion for the current session state. The host renderer owns the four-section
- * layout, so a missing, empty or malformed model reply degrades to the local suggestion instead
- * of an empty one. Returns undefined only if the host output itself breaks the contract.
+ * V1 displays only a model-generated request; unavailable generation leaves the editor unchanged.
+ * U4: the next open task of the latest todo snapshot wins over model text, and a fresh passing
+ * check suppresses the suggestion until another edit or failure.
  */
 export function composeSuggestion(input: ComposeSuggestionInput): ComposedSuggestion | undefined {
+	if (!input.canSend) return undefined;
 	const facts = collectSuggestionFacts({
 		messages: input.session.agent.state.messages,
 		outcome: input.outcome,
-		modelMissing: !input.canSend,
+		modelMissing: false,
 		generation: input.generation,
 		env: input.env,
 	});
+	if (facts.outcome === "completed" && !facts.failedTools.length) {
+		if (facts.nextTask !== undefined) {
+			const next = sanitizeModelTask(facts.nextTask ?? undefined, facts);
+			return next && !facts.freshCheck ? { title: next, prompt: next, source: "local" } : undefined;
+		}
+		if (facts.freshCheck) return undefined;
+	}
 	const task = sanitizeModelTask(input.modelText, facts);
-	// A reply that fails validation is recorded as the reason no model sentence contributed.
-	const rejected = input.modelText !== undefined && task === undefined;
-	const suggestion = buildSuggestion(rejected ? { ...facts, generation: "invalid_output" } : facts, task);
-	const prompt = renderSuggestionPrompt(suggestion);
-	if (suggestionViolation(suggestion) !== undefined || !isWellFormedSuggestionPrompt(prompt)) return undefined;
-	const source = suggestion.source === "local" ? "local" : input.cached ? "cache" : "generated";
-	return { title: suggestion.title, prompt, source, ...(suggestion.source === "model" && task ? { task } : {}) };
+	if (!task || task.length > MAX_SUGGESTION_CHARS) return undefined;
+	return { title: task, prompt: task, source: input.cached ? "cache" : "generated", task };
 }
 
 /** Fail closed: an error, a timeout or a missing reader all count as unavailable. */
@@ -134,19 +135,26 @@ export function snapshotOutcome(messages: readonly unknown[]): SuggestionTurnOut
 	return stop === "aborted" ? "aborted" : stop === "error" ? "failed" : "completed";
 }
 
-/**
- * One settled-turn suggestion pipeline; the controller owns UI and cancellation state.
- *
- * A local suggestion is shown first, before any await, so the editor never waits on a
- * provider. A model sentence then refines it when the plan admits a request and the reply
- * validates; every skip, empty reply, timeout and provider error leaves the local one in
- * place. An aborted turn is an explicit cancel: nothing is shown and nothing is requested.
- */
+/** One settled-turn suggestion pipeline; missing or rejected generation shows no fallback. */
 export async function runSettledSuggestion(input: RunSettledSuggestionInput): Promise<void> {
 	const { session, options, record, finalAssistant, parentTurnIndex } = input;
 	const now = options.now ?? Date.now;
 	const settledAtEpochMs = Date.now();
+	const report = options.displayLog?.({
+		parentTurnIndex,
+		settledAtEpochMs,
+		provider: record?.model.provider,
+		model: record?.model.id,
+	});
 	const capsOn = isSuggestionCapsEnabled(options.env);
+	const diagnostics = settlement.isSuggestionDiagnosticsEnabled(options.env);
+	let quotaReadMs: number | undefined;
+	const settleSkip = (plan: Parameters<typeof settlement.skipSettlement>[0]) => {
+		if (!capsOn && !diagnostics) return;
+		const base = settlement.skipSettlement(plan, session.model, parentTurnIndex);
+		const read = diagnostics && quotaReadMs !== undefined ? { quotaReadMs } : {};
+		options.settle?.({ ...base, ...(capsOn ? {} : { capsApplied: false as const }), ...read });
+	};
 	const outcome = input.outcome === "completed" || input.outcome === "aborted" ? input.outcome : "failed";
 	const makePlan = (usage: QuotaUsage) =>
 		planSuggestion({
@@ -160,16 +168,21 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 		});
 	let quotaCheckedAtEpochMs = settledAtEpochMs;
 	const show = (extra: Pick<ComposeSuggestionInput, "generation" | "modelText" | "cached">): string | undefined => {
-		if (outcome === "aborted" || !input.isCurrent() || !input.editorEmpty()) return undefined;
+		if (outcome === "aborted" || !input.isCurrent() || !input.editorEmpty()) {
+			report?.("skipped", outcome === "aborted" ? "aborted" : !input.isCurrent() ? "stale_turn" : "editor_nonempty");
+			return undefined;
+		}
 		const canSend = sessionCanSend(session, options);
 		const composed = composeSuggestion({ session, outcome, canSend, env: options.env, ...extra });
-		if (composed) input.show(composed, { parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs });
+		if (extra.modelText && !composed?.task) report?.("skipped", "invalid_output");
+		if (composed) input.show(composed, { parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs, report });
 		return composed?.task;
 	};
 	let plan = makePlan("no_quota");
 	if (plan.kind !== "request") {
+		if (outcome !== "aborted") report?.("skipped", plan.reason);
 		options.onPlan?.(plan);
-		if (capsOn) options.settle?.(settlement.skipSettlement(plan, session.model, parentTurnIndex));
+		settleSkip(plan);
 		show({ generation: plan.reason });
 		return;
 	}
@@ -179,13 +192,16 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 		return;
 	}
 	show({});
+	const quotaStartedAt = performance.now();
 	const usage = await checkUsage(options);
 	quotaCheckedAtEpochMs = Date.now();
-	if (!input.isCurrent()) return;
+	quotaReadMs = Math.round(performance.now() - quotaStartedAt);
+	if (!input.isCurrent()) return report?.("skipped", input.cancelReason?.() ?? "stale_turn");
 	plan = makePlan(usage);
 	options.onPlan?.(plan);
 	if (plan.kind !== "request") {
-		if (capsOn) options.settle?.(settlement.skipSettlement(plan, session.model, parentTurnIndex));
+		report?.("skipped", plan.reason);
+		settleSkip(plan);
 		show({ generation: plan.reason });
 		return;
 	}
@@ -213,12 +229,21 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 	})();
 	const { provider, id } = plan.record.model;
 	const caps = plan.caps ? { caps: { reasoningCapped: plan.caps.reasoningCapped } } : {};
-	options.settle?.({ result, provider, model: id, parentTurnIndex, startedAtEpochMs, ...caps });
-	if (!input.isCurrent() || controller.signal.aborted) return;
+	options.settle?.({
+		result,
+		provider,
+		model: id,
+		parentTurnIndex,
+		startedAtEpochMs,
+		...caps,
+		...(diagnostics ? { quotaReadMs } : {}),
+	});
+	if (!input.isCurrent() || controller.signal.aborted)
+		return report?.("skipped", input.cancelReason?.() ?? (controller.signal.aborted ? "aborted" : "stale_turn"));
 	input.pendingOwner.pending = undefined;
 	const current = session.model;
-	if (plan.caps && (current?.provider !== provider || current?.id !== id)) return;
-	// No retry: one request per settled turn, then the local suggestion stands with the reason attached.
+	if (plan.caps && (current?.provider !== provider || current?.id !== id)) return report?.("skipped", "model_changed");
+	if (result.outcome !== "shown") report?.("skipped", result.outcome);
 	const task = show(
 		result.text ? { modelText: result.text } : { generation: result.outcome === "shown" ? "empty" : result.outcome },
 	);

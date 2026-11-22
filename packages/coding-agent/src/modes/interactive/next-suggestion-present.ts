@@ -27,13 +27,22 @@ export interface PresentSuggestionInput {
 export function presentSuggestion(input: PresentSuggestionInput): ShownState {
 	const { composed, previous, session } = input;
 	if (previous?.text === composed.prompt) return previous;
+	previous?.candidate.report?.("cleared", "replaced", previous.surface);
 	const model = session.model;
 	const shown: ShownState = {
 		text: composed.prompt,
 		title: composed.title,
 		...(composed.task ? { task: composed.task } : {}),
-		candidate: { provider: model?.provider ?? "", model: model?.id ?? "", ...input.timing, source: composed.source },
-		revision: suggestionRevision(session.agent.state.messages, model, sessionCanSend(session, input.options)),
+		candidate: {
+			provider: model?.provider ?? "",
+			model: model?.id ?? "",
+			...input.timing,
+			source: composed.source,
+			report:
+				input.timing.report &&
+				((event, reason, surface) => input.timing.report?.(event, reason, surface, composed.source)),
+		},
+		revision: suggestionRevision(session, sessionCanSend(session, input.options)),
 		surface: "empty-editor",
 	};
 	showEmptySuggestion({
@@ -49,8 +58,7 @@ export function presentSuggestion(input: PresentSuggestionInput): ShownState {
 }
 
 /**
- * Local suggestion for a controller that no turn settles in front of (startup, resume, session
- * switch). Nothing for a running turn, an aborted last turn, or an editor that holds a draft.
+ * No startup candidate exists in v1; only generated or cached model requests can be shown.
  */
 export function initialSuggestion(
 	session: SuggestionSessionPort,

@@ -6,7 +6,7 @@
  * byte-identical to the spec 091 "reuse" arm. Defaults are fixed in the spec and
  * overridden by env; an explicit 0 cap skips the suggestion (`budget_unset`).
  */
-import type { Api, Context, Model, SimpleStreamOptions, ThinkingLevel } from "omk-ai";
+import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions, ThinkingLevel } from "omk-ai";
 import { promptCacheCapability } from "omk-ai";
 
 export const NEXT_SUGGESTIONS_CAPS_ENV = "OMK_NEXT_SUGGESTIONS_CAPS";
@@ -90,6 +90,23 @@ export function estimateSuggestionCostUsd(model: Model<Api>, context: Context, m
 	return (estimateContextInputTokens(context) * inputRate + maxOutputTokens * (cost.output ?? 0)) / 1_000_000;
 }
 
+// Codex subscriptions may report zero prices even on a measured cache hit.
+export function hasObservedCodexHit(
+	model: Model<Api>,
+	final: AssistantMessage,
+	options?: SimpleStreamOptions,
+): boolean {
+	return (
+		model.provider === "openai-codex" &&
+		model.api === "openai-codex-responses" &&
+		final.api === model.api &&
+		final.provider === model.provider &&
+		final.model === model.id &&
+		options?.cacheRetention !== "none" &&
+		Number.isSafeInteger(final.usage?.cacheRead) &&
+		final.usage.cacheRead > 0
+	);
+}
 export type CacheCheck = "ok" | "no_cache_support" | "cache_capability_unknown" | "cache_cold";
 
 /** Table-based replacement for `supportsPromptCache` + `cacheTtlMs`; record start time is the anchor. */

@@ -100,7 +100,7 @@ export function editRatioBucket(suggestion: string, sent: string): EditRatioBuck
 }
 
 /** Printable input replaces the empty editor's placeholder; anything else is `other`. */
-export function dismissReasonForKey(data: string): DismissReason {
+export function dismissReasonForKey(data: string): "typed_over" | "other" {
 	return [...data].length === 1 && data >= " " && data !== "\u007f" ? "typed_over" : "other";
 }
 

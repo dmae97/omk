@@ -203,6 +203,8 @@ Skills register as `/skill:name` commands and interactive `!` launcher entries:
 
 Arguments after the command are appended after the skill content for the current turn.
 
+In interactive autocomplete, select a `/name` or `/skill:name` skill with Enter or Tab, then write the request and press Enter to submit. Selecting a skill leaves the draft editable; ordinary slash commands such as `/help` still execute on Enter selection.
+
 `!omk <role-or-request>` is a deterministic OMK hub router. Exact role aliases such as `frontend`, `backend`, `loop`, and `plan` select `omk-frontend`, `omk-backend-data`, `omk-loop`, and `omk-plan`; free-form prompts are scored against the same hub vocabulary and fall back to `omk-skills` when no role is clear.
 
 In interactive mode, type `!` to open skill autocomplete. Selecting a skill inserts the explicit `!skill:name` form, and `!omk` is offered when the OMK skill hub index is available. Bash remains available as `! command`, and `!! command` runs bash without sending output to the model. If `!token` is not a known skill, it falls back to bash; use `! command` when a command name might collide with a skill. `!omk` is reserved for OMK hub routing and never falls through to bash.

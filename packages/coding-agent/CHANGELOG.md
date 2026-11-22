@@ -2,7 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) return to the v1 form: the model's next request on one line, at most 200 characters, with a 128-token output budget. The host no longer adds context, scope or checklist lines or a local startup/error suggestion; an empty, malformed, timed-out or failed reply shows nothing and is not retried. The next open task of the latest todo snapshot takes precedence over model text, and after a successful workspace check (`npm run check`, `npm test`, ...) the editor stays empty until another edit or failure. Late replies after a turn, session, branch, model or compaction change are discarded. See [environment variables](docs/environment-variables.md).
+
+### Added
+
+- `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS` (default off, requires `OMK_NEXT_SUGGESTIONS`) writes a turn-metrics record for every skipped suggestion and adds `quotaReadMs` (quota lookup time). Records hold enums and numbers only and change no request or display behavior.
+
 ### Fixed
+
+- Selecting a `/name` or `/skill:name` skill in autocomplete with Enter or Tab no longer submits the prompt; the draft stays editable. Ordinary slash commands such as `/help` still run on Enter.
+- An accepted legacy (v2/v3) suggestion prompt that the user extended is matched for skills by the user's words, including text typed after the last line, instead of the host's context and completion wording.
 
 - The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.
 - A main-turn request whose OAuth token the provider rejects (`401 token_expired`, `token_revoked`) now forces one token refresh and retries once, as compaction already did. A failed refresh reports the original error with a `/login <provider>` hint. API keys, non-auth errors, and rejections that arrive after output started are not retried.
