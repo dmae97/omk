@@ -1268,7 +1268,7 @@ export class SettingsManager {
 	}
 
 	getPinStatusSidebar(): boolean {
-		return this.settings.pinStatusSidebar ?? process.env.OMK_PIN_STATUS_SIDEBAR === "1";
+		return this.settings.pinStatusSidebar ?? (process.env.OMK_PIN_STATUS_SIDEBAR ?? "1") === "1";
 	}
 
 	/**

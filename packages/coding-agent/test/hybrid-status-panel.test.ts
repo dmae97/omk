@@ -51,6 +51,7 @@ it.skipIf(Number(process.versions.node.split(".")[0]) < 26)(
 			await vi.waitFor(() => expect(repaint).toHaveBeenCalled(), { timeout: 10000 });
 			const output = panel.render(38);
 			expect(output.map(stripAnsi).join("\n")).toContain("hybrid-model");
+			expect(panel.renderState).toBe("opentui-frame");
 			expect(output.every((line) => visibleWidth(line) <= 38)).toBe(true);
 			panel.setExpanded(true);
 			panel.render(38);
@@ -85,6 +86,7 @@ it("preserves the native rail when model projection fails", async () => {
 		() => {},
 	);
 	expect(panel.render(38)).toEqual(["native status"]);
+	expect(panel.renderState).toBe("render-error");
 	panel.dispose();
 	await panel.waitForClose();
 });

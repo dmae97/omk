@@ -311,8 +311,11 @@ terminal-control commands. No additional agent or model runs.
   also show individual connections, session and runtime details; short terminals
   prioritize essential status, skill and check observations over connection lists
   and runtime details. Custom keybindings are reflected in the panel hint.
-- `Ctrl+Q` hides/restores the panel. Below 120 columns or 16 rows the existing
-  footer layout is used, without covering the editor.
+- Fresh settings pin the panel. `Ctrl+Q` saves the choice, including a hidden
+  panel. Below 120 columns or 16 rows the footer layout leaves the editor visible.
+- `/debug` and `/debug save` report layout, requested renderer and last render.
+  A last OpenTUI frame is historical when the layout is hidden. `native-selected`
+  is an explicit opt-out; fallback and worker failure are not OpenTUI success.
 - Requires the optional `@opentui/core` dependency and Node 26.4 or newer. The
   rendering child alone receives `--experimental-ffi`; unsupported runtimes,
   missing native libraries, render failures and timeouts fall back to the native
