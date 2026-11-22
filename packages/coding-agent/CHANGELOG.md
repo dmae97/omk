@@ -4,7 +4,7 @@
 
 ### Changed
 
-- With `OMK_OPENTUI_STATUS_RAIL` on (the default), the `Ctrl+O` control pane overlay and the built-in footer also render with OpenTUI, each in its own offscreen worker with its own native fallback. `FooterComponent` still decides every footer segment, drop and truncation; extension footers (`setFooter`) stay native. A standalone Bun binary (Bun 1.3.14+) starts the worker from its own executable; packaging the OpenTUI runtime into release artifacts is a separate change. See [TUI](docs/tui.md#hybrid-opentui-status-panel).
+- With `OMK_OPENTUI_STATUS_RAIL` on (the default), the `Ctrl+O` control pane overlay and the built-in footer also render with OpenTUI, each in its own offscreen worker with its own native fallback. `FooterComponent` still decides every footer segment, drop and truncation; extension footers (`setFooter`) stay native. A standalone Bun binary (Bun 1.3.14+) starts the worker from its own executable. See [TUI](docs/tui.md#hybrid-opentui-status-panel).
 - The pinned status rail now shows from 108 columns (previously 120) and 16 rows. The control pane overlay keeps the MD/LG breakpoints.
 - Fresh settings pin the status rail, and `Ctrl+Q` saves the choice, including a hidden rail. `/debug` and `/debug save` report the rail layout, the requested renderer and the last render; an earlier OpenTUI frame does not count as the rail being visible now.
 - Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) return to the v1 form: the model's next request on one line, at most 200 characters, with a 128-token output budget. The host no longer adds context, scope or checklist lines or a local startup/error suggestion; an empty, malformed, timed-out or failed reply shows nothing and is not retried. The next open task of the latest todo snapshot takes precedence over model text, and after a successful workspace check (`npm run check`, `npm test`, ...) the editor stays empty until another edit or failure. Late replies after a turn, session, branch, model or compaction change are discarded. See [environment variables](docs/environment-variables.md).
@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- Standalone release binaries now ship the locked `@opentui/core` runtime and its native library for their platform, so the status rail renders an OpenTUI frame instead of falling back with `dependency-error`. `scripts/build-binaries.sh` stages it from `package-lock.json` (archives with integrity only; `--skip-deps` stages offline).
 - Selecting a `/name` or `/skill:name` skill in autocomplete with Enter or Tab no longer submits the prompt; the draft stays editable. Ordinary slash commands such as `/help` still run on Enter.
 - An accepted legacy (v2/v3) suggestion prompt that the user extended is matched for skills by the user's words, including text typed after the last line, instead of the host's context and completion wording.
 - The startup warning about a global `tools/` directory now fires only for legacy custom-tool entries (a top-level `.ts`, `.js`, `.mjs` or `.cjs` file, or a directory with an `index.*` file), not for unrelated checkouts or binaries stored there.
