@@ -29,6 +29,7 @@ import { CONFIG_DIR_NAME } from "../config.ts";
 import { spawnProcess, spawnProcessSync } from "../utils/child-process.ts";
 import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { canonicalizePath, isLocalPath, markPathIgnoredByCloudSync, resolvePath } from "../utils/paths.ts";
+import { repairNativePackage } from "./native-subagent-package.ts";
 import { isStdoutTakenOver } from "./output-guard.ts";
 import { extractNpmPackageTarball } from "./package-archive.ts";
 import {
@@ -774,6 +775,7 @@ export class DefaultPackageManager implements PackageManager {
 				if (!existsSync(resolved)) {
 					throw new Error(`Path does not exist: ${resolved}`);
 				}
+				repairNativePackage(resolved);
 				return;
 			}
 			throw new Error(`Unsupported install source: ${source}`);
@@ -935,6 +937,10 @@ export class DefaultPackageManager implements PackageManager {
 		const installRoot = this.getNpmInstallRoot(scope, false);
 		this.ensureNpmProject(installRoot);
 		await this.runNpmCommand(this.getNpmInstallArgs(specs, installRoot));
+		for (const spec of specs) {
+			const parsed = this.parseSource(`npm:${spec}`);
+			if (parsed.type === "npm") repairNativePackage(join(installRoot, "node_modules", parsed.name));
+		}
 	}
 
 	async checkForAvailableUpdates(): Promise<PackageUpdate[]> {
@@ -1609,6 +1615,7 @@ export class DefaultPackageManager implements PackageManager {
 		const installRoot = this.getNpmInstallRoot(scope, temporary);
 		this.ensureNpmProject(installRoot);
 		await this.runNpmCommand(this.getNpmInstallArgs([source.spec], installRoot, ignoreScripts));
+		repairNativePackage(join(installRoot, "node_modules", source.name));
 	}
 
 	private async uninstallNpm(source: NpmSource, scope: SourceScope): Promise<void> {
@@ -1649,6 +1656,7 @@ export class DefaultPackageManager implements PackageManager {
 		if (installDependencies && existsSync(packageJsonPath)) {
 			await this.runNpmCommand(this.getGitDependencyInstallArgs(), { cwd: targetDir });
 		}
+		repairNativePackage(targetDir);
 	}
 
 	private async updateGit(source: GitSource, scope: SourceScope): Promise<void> {
@@ -1738,12 +1746,14 @@ export class DefaultPackageManager implements PackageManager {
 			} else {
 				await this.repairMissingGitDependencies(targetDir);
 			}
+			repairNativePackage(targetDir);
 			return;
 		}
 
 		writeFileSync(markerPath, "", "utf-8");
 		await this.runCommand("git", ["reset", "--hard", commitRef], { cwd: targetDir });
 		await this.cleanAndInstallGitDependencies(targetDir, markerPath);
+		repairNativePackage(targetDir);
 	}
 
 	private async refreshTemporaryGitSource(source: GitSource, sourceStr: string): Promise<void> {
