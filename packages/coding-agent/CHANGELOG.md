@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-11-22
+
 ### Changed
 
 - With `OMK_OPENTUI_STATUS_RAIL` on (the default), the `Ctrl+O` control pane overlay and the built-in footer also render with OpenTUI, each in its own offscreen worker with its own native fallback. `FooterComponent` still decides every footer segment, drop and truncation; extension footers (`setFooter`) stay native. A standalone Bun binary (Bun 1.3.14+) starts the worker from its own executable. See [TUI](docs/tui.md#hybrid-opentui-status-panel).
