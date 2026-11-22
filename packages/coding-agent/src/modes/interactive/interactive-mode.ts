@@ -173,10 +173,10 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
-import type { HybridStatusPanel } from "./hybrid-status-panel.ts";
 import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
-import { pinnedRailNotice, railFits } from "./layout-class.ts";
+import { pinnedRailNotice, railFits, railVisibility } from "./layout-class.ts";
+import { type FooterPanelModel, type HybridStatusPanel, hybridControlPane, hybridFooter } from "./opentui-surfaces.ts";
 import { formatResourceDescription, getAutocompleteSourceTag } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
@@ -200,7 +200,7 @@ import {
 } from "./theme/theme.ts";
 import { checkTmuxKeyboardSetup } from "./tmux-keyboard.ts";
 import type { TmuxStatusRail } from "./tmux-status-rail.ts";
-import { createTuiDiagnostics, createTuiDiagnosticsView, saveTuiDiagnostics } from "./tui-diagnostics.ts";
+import { createTuiDiagnostics, createTuiDiagnosticsView, notifyDiagnosticSave } from "./tui-diagnostics.ts";
 import { captureTuiRuntime, inspectTuiRuntime } from "./tui-runtime-info.ts";
 
 const TUI_RUNTIME = captureTuiRuntime(import.meta.url);
@@ -397,6 +397,9 @@ export class InteractiveMode {
 	private statusSidebar: StatusSidebarComponent | undefined;
 	/** OpenTUI rendering of the pinned rail; undefined when `OMK_OPENTUI_STATUS_RAIL=0`. */
 	private hybridStatusPanel: HybridStatusPanel | undefined;
+	/** OpenTUI renderings of the Ctrl+O control pane and the built-in footer, under the same switch. */
+	private hybridControlPane: HybridStatusPanel | undefined;
+	private hybridFooter: HybridStatusPanel<FooterPanelModel> | undefined;
 	/** Optional tmux pane that takes over the pinned rail (`OMK_TMUX_STATUS_RAIL=1`). */
 	private tmuxStatusRail: TmuxStatusRail | undefined;
 	private readonly statusPanelActivity = new StatusPanelActivity(() => this.ui.requestRender());
@@ -410,10 +413,10 @@ export class InteractiveMode {
 				this.isStatusSidebarVisible(this.ui.terminal.columns, this.ui.terminal.rows)
 			)
 				return [];
-			return (this.customFooter ?? this.footer).render(width);
+			return (this.customFooter ?? this.hybridFooter ?? this.footer).render(width);
 		},
 		invalidate: (): void => {
-			(this.customFooter ?? this.footer).invalidate?.();
+			(this.customFooter ?? this.hybridFooter ?? this.footer).invalidate?.();
 		},
 	};
 
@@ -478,6 +481,7 @@ export class InteractiveMode {
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
+		this.hybridFooter = hybridFooter(this.footer, this.ui);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
 		this.footer.setShowSystemMetrics(this.settingsManager.getFooterSystemMetrics());
 		this.noticeContainer = new Container();
@@ -834,7 +838,14 @@ export class InteractiveMode {
 			this.builtInHeader = controlPanel;
 			// The headroom label is probed off the render path; repaint once if a version turns up.
 			void repaintWhenHeadroomVersionResolves(() => this.ui.requestRender());
-			this.ui.showOverlay(new ControlPanelRightPaneComponent(controlPanelContent, () => this.ui.terminal.rows), {
+			const nativePane = new ControlPanelRightPaneComponent(controlPanelContent, () => this.ui.terminal.rows);
+			this.hybridControlPane = hybridControlPane(nativePane, this.ui, {
+				getSession: () => this.session,
+				footerData: this.footerDataProvider,
+				readActivity: () => this.statusPanelActivity.read(this.session),
+				rnode: () => this.rnode.panelInput(),
+			});
+			this.ui.showOverlay(this.hybridControlPane ?? nativePane, {
 				anchor: "top-right",
 				width: CONTROL_PANEL_SIDEBAR_WIDTH,
 				maxHeight: "100%",
@@ -862,7 +873,9 @@ export class InteractiveMode {
 		this.renderWidgets(); // Initialize with default spacer
 		this.ui.addChild(this.widgetContainerAbove);
 		this.ui.addChild(this.attachmentStripContainer);
-		this.ui.addChild(new InputReadinessComponent(() => this.onInputCallback !== undefined));
+		const pinned = this.settingsManager.getPinStatusSidebar();
+		const pinSaved = this.settingsManager.getGlobalSettings().pinStatusSidebar !== undefined;
+		if (!pinSaved && !pinned) this.ui.addChild(new InputReadinessComponent(() => this.onInputCallback !== undefined));
 		this.ui.addChild(this.editorContainer);
 		this.ui.addChild(this.widgetContainerBelow);
 		this.ui.addChild(this.noticeContainer);
@@ -2156,12 +2169,16 @@ export class InteractiveMode {
 
 	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
 	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		// An extension footer owns the status slot, so the pinned rail steps aside while it is set.
-		return (
-			!this.tmuxStatusRail?.active &&
-			this.customFooter === undefined &&
-			this.statusSidebarPinned &&
-			railFits(termWidth, termHeight)
+		return this.statusRailVisibility(termWidth, termHeight) === "visible";
+	}
+
+	private statusRailVisibility(width: number, height: number) {
+		return railVisibility(
+			this.statusSidebarPinned,
+			this.customFooter !== undefined,
+			this.tmuxStatusRail?.active === true,
+			width,
+			height,
 		);
 	}
 
@@ -2170,6 +2187,7 @@ export class InteractiveMode {
 	 */
 	private toggleStatusSidebar(): void {
 		this.statusSidebarPinned = !this.statusSidebarPinned;
+		this.settingsManager.setPinStatusSidebar(this.statusSidebarPinned);
 		if (this.statusSidebarPinned && this.customFooter === undefined) this.tmuxStatusRail?.start();
 		else this.tmuxStatusRail?.stop();
 		// The footer slot and the right gutter both key off isStatusSidebarVisible,
@@ -3109,7 +3127,7 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
-		if (this.hybridStatusPanel) this.statusPanelActivity.observe(this.session, event);
+		if (this.hybridStatusPanel || this.hybridControlPane) this.statusPanelActivity.observe(this.session, event);
 
 		switch (event.type) {
 			case "prompt_settled":
@@ -6327,6 +6345,11 @@ export class InteractiveMode {
 		const report = createTuiDiagnostics({
 			runtime: inspectTuiRuntime(TUI_RUNTIME),
 			terminal: this.ui.terminal,
+			rail: {
+				layout: this.statusRailVisibility(this.ui.terminal.columns, this.ui.terminal.rows),
+				requested: this.hybridStatusPanel ? "opentui" : "native",
+				lastRender: this.hybridStatusPanel?.renderState ?? "native-selected",
+			},
 			isStreaming: this.session.isStreaming,
 			isCompacting: this.session.isCompacting,
 			messageCount: this.session.messages.length,
@@ -6335,15 +6358,7 @@ export class InteractiveMode {
 		});
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(createTuiDiagnosticsView(report, TUI_RUNTIME));
-		if (args === "save") {
-			try {
-				this.showStatus(`Metadata-only diagnostics saved locally: ${saveTuiDiagnostics(report)}`);
-			} catch {
-				this.showError(
-					"Could not save diagnostics. Check temporary-directory permissions; no transcript was exported.",
-				);
-			}
-		}
+		if (args === "save") notifyDiagnosticSave(report, this.showStatus.bind(this), this.showError.bind(this));
 		this.ui.requestRender();
 	}
 
@@ -6483,6 +6498,7 @@ export class InteractiveMode {
 	stop(options: { finalSessionLog?: boolean } = {}): void {
 		this.tmuxStatusRail?.dispose();
 		this.hybridStatusPanel?.dispose();
+		this.hybridControlPane?.dispose();
 		this.statusPanelActivity?.dispose();
 		this.rnode?.dispose();
 		disposeInteractiveNextSuggestions();
@@ -6510,6 +6526,7 @@ export class InteractiveMode {
 		}
 
 		for (const component of [this.chatContainer, this.builtInHeader, this.customHeader]) disposeComponent(component);
+		this.hybridFooter?.dispose();
 		this.footer.dispose();
 		this.footerDataProvider.dispose();
 		this.unsubscribeThemedOutputStale?.();

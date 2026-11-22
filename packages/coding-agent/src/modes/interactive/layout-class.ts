@@ -1,7 +1,6 @@
 /**
  * Terminal layout classes from the TUI redesign doc: XS (<80 columns), SM (80-119), MD (120-159) and LG (>=160).
- * Right rails are allowed only at MD/LG. The absolute numbers are provisional pending native visual QA, so this
- * module is their single owner: every rail gate must call `railFits` instead of comparing sizes itself.
+ * The startup deck and control pane use MD/LG; an explicitly pinned status sidebar fits at 108 columns.
  */
 
 export type LayoutClass = "xs" | "sm" | "md" | "lg";
@@ -10,6 +9,7 @@ export const LAYOUT_BREAKPOINTS = { sm: 80, md: 120, lg: 160 } as const;
 
 /** Minimum terminal rows for any right rail (pinned sidebar or control-pane overlay). */
 export const RAIL_MIN_ROWS = 16;
+export const PINNED_RAIL_MIN_COLUMNS = 108;
 
 /** Non-finite or narrower-than-SM widths fail closed to "xs". */
 export function classifyLayout(columns: number): LayoutClass {
@@ -24,13 +24,19 @@ export function isRailLayout(layout: LayoutClass): boolean {
 }
 
 /** The single rail gate used by the deck, the control-pane overlay, and the pinned sidebar. */
-export function railFits(columns: number, rows?: number): boolean {
-	if (!isRailLayout(classifyLayout(columns))) return false;
+export function railFits(columns: number, rows?: number, minColumns: number = LAYOUT_BREAKPOINTS.md): boolean {
+	if (!Number.isFinite(columns) || columns < minColumns) return false;
 	return rows === undefined || (Number.isFinite(rows) && rows >= RAIL_MIN_ROWS);
 }
 
 /** Status line for pinning the sidebar on a terminal too small to show it; undefined when the rail fits. */
+export function railVisibility(pinned: boolean, customFooter: boolean, tmux: boolean, width: number, height: number) {
+	if (tmux) return "tmux-owner";
+	if (customFooter) return "custom-footer";
+	if (!pinned) return "unpinned";
+	return railFits(width, height, PINNED_RAIL_MIN_COLUMNS) ? "visible" : "terminal-too-small";
+}
 export function pinnedRailNotice(columns: number, rows: number): string | undefined {
-	if (railFits(columns, rows)) return undefined;
-	return `Status sidebar pinned; it shows at ${LAYOUT_BREAKPOINTS.md}+ columns and ${RAIL_MIN_ROWS}+ rows.`;
+	if (railFits(columns, rows, PINNED_RAIL_MIN_COLUMNS)) return undefined;
+	return `Status sidebar pinned; it shows at ${PINNED_RAIL_MIN_COLUMNS}+ columns and ${RAIL_MIN_ROWS}+ rows.`;
 }

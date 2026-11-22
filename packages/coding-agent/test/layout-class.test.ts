@@ -106,12 +106,13 @@ describe("railFits", () => {
 });
 
 describe("pinnedRailNotice", () => {
-	const NOTICE = "Status sidebar pinned; it shows at 120+ columns and 16+ rows.";
+	const NOTICE = "Status sidebar pinned; it shows at 108+ columns and 16+ rows.";
 
 	test.each([
-		[119, 40, NOTICE],
-		[120, 15, NOTICE],
-		[120, 16, undefined],
+		[107, 28, NOTICE],
+		[108, 15, NOTICE],
+		[108, 16, undefined],
+		[108, 28, undefined],
 		[Number.NaN, 40, NOTICE],
 		[160, Number.NaN, NOTICE],
 	] as const)("pinnedRailNotice(%s, %s) -> %s", (columns, rows, expected) => {
@@ -121,7 +122,7 @@ describe("pinnedRailNotice", () => {
 	test("a notice appears exactly when the rail cannot show, for any doubles", () => {
 		fc.assert(
 			fc.property(anyNumber, anyNumber, (columns, rows) => {
-				const fits = Number.isFinite(columns) && columns >= 120 && Number.isFinite(rows) && rows >= 16;
+				const fits = Number.isFinite(columns) && columns >= 108 && Number.isFinite(rows) && rows >= 16;
 				expect(pinnedRailNotice(columns, rows)).toBe(fits ? undefined : NOTICE);
 			}),
 		);

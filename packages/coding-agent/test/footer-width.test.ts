@@ -4,6 +4,7 @@ import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import type { PiPackageIntakeSummary } from "../src/core/pi-package-intake.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
+import { footerPanelModel } from "../src/modes/interactive/opentui-footer-model.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 type AssistantUsage = {
@@ -203,5 +204,41 @@ describe("FooterComponent width handling", () => {
 		const enabledFooter = new FooterComponent(session, footerData);
 		enabledFooter.setShowSystemMetrics(true);
 		expect(enabledFooter.render(120).join("\n")).toContain("CPU 42%");
+	});
+});
+
+describe("FooterComponent OpenTUI panel model", () => {
+	beforeAll(() => {
+		initTheme(undefined, false);
+	});
+
+	const plain = (spans: readonly { text: string }[]) => spans.map((span) => span.text).join("");
+
+	it("carries the native rows, with the model on the right side of the stats row", () => {
+		const session = createSession({
+			sessionName: "",
+			modelId: "gpt-6",
+			reasoning: true,
+			thinkingLevel: "high",
+			usage: { input: 12_345, output: 678, cacheRead: 0, cacheWrite: 0, cost: { total: 0.25 } },
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+		const width = 100;
+		const native = footer.render(width).map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+		const model = footerPanelModel(footer.renderParts(width), "#ede6d6");
+		expect(model.lines).toHaveLength(native.length);
+		expect(plain(model.lines[0]!.left)).toBe(native[0]);
+		const stats = model.lines[1]!;
+		expect(plain(stats.right)).toBe("gpt-6 • high");
+		// Native padding sits exactly between the two OpenTUI sides.
+		expect(native[1]).toBe(
+			plain(stats.left) +
+				" ".repeat(width - visibleWidth(plain(stats.left)) - visibleWidth(plain(stats.right))) +
+				plain(stats.right),
+		);
+		expect(
+			model.lines.flatMap((line) => [...line.left, ...line.right]).every((span) => !span.text.includes("\x1b")),
+		).toBe(true);
+		expect(model.text).toMatch(/^#[0-9a-f]{6}$/);
 	});
 });

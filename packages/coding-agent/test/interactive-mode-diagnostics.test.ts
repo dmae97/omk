@@ -27,6 +27,8 @@ function context() {
 		ui: { terminal: { columns: 120, rows: 40 }, render: vi.fn(() => [canary]), requestRender: vi.fn() },
 		session: { messages: [{ role: "user", content: canary }], isStreaming: false, isCompacting: false },
 		showError: vi.fn(),
+		statusSidebarPinned: false,
+		statusRailVisibility: Reflect.get(InteractiveMode.prototype, "statusRailVisibility"),
 		lastRenderedTermination: undefined as SessionTermination | undefined,
 		toolOutputExpanded: false,
 	};

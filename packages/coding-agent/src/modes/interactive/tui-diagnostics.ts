@@ -24,6 +24,7 @@ export interface TuiDiagnostics {
 		readonly messageCount: number;
 		readonly lastResourceReloadAt: string | null;
 	};
+	readonly rail?: { layout: string; requested: "opentui" | "native"; lastRender: string };
 	readonly termination: DiagnosticTermination | null;
 }
 
@@ -59,6 +60,7 @@ function projectOutputStats(value: TerminalOutputStats | undefined): TerminalOut
 export function createTuiDiagnostics(
 	input: {
 		readonly runtime: TuiRuntimeInfo;
+		readonly rail?: TuiDiagnostics["rail"];
 		readonly isStreaming: boolean;
 		readonly isCompacting: boolean;
 		readonly messageCount: number;
@@ -90,6 +92,9 @@ export function createTuiDiagnostics(
 			buildRevision: r.buildRevision,
 		},
 		terminal: { columns: terminal.columns, rows: terminal.rows, ...(output ? { output } : {}) },
+		...(input.rail
+			? { rail: { layout: input.rail.layout, requested: input.rail.requested, lastRender: input.rail.lastRender } }
+			: {}),
 		session: {
 			streaming: input.isStreaming,
 			compacting: input.isCompacting,
@@ -126,6 +131,17 @@ export function saveTuiDiagnostics(report: TuiDiagnostics, directory = tmpdir())
 	}
 }
 
+export function notifyDiagnosticSave(
+	report: TuiDiagnostics,
+	status: (message: string) => void,
+	error: (message: string) => void,
+): void {
+	try {
+		status(`Metadata-only diagnostics saved locally: ${saveTuiDiagnostics(report)}`);
+	} catch {
+		error("Could not save diagnostics. Check temporary-directory permissions; no transcript was exported.");
+	}
+}
 export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiRuntimeCapture): Component {
 	return {
 		render(width: number): string[] {
@@ -150,6 +166,11 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 				`Last resource reload: ${report.session.lastResourceReloadAt ?? "not reloaded in this TUI"}`,
 				"/reload refreshes resources, not core code. Core updates require a restart.",
 				`Terminal: ${report.terminal.columns}×${report.terminal.rows} · Messages: ${report.session.messageCount}`,
+				...(report.rail
+					? [
+							`Right rail: ${report.rail.layout} · requested: ${report.rail.requested} · renderer state: ${report.rail.lastRender}`,
+						]
+					: []),
 				`Streaming: ${report.session.streaming ? "yes" : "no"} · Compacting: ${report.session.compacting ? "yes" : "no"}`,
 				t ? `Latest outcome: ${t.kind} · ${t.causeCode} · ${t.source}` : "Latest outcome: none recorded",
 				...(t
