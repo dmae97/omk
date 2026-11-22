@@ -48,18 +48,26 @@
     <td align="center"><a href="https://github.com/AndreIsraelAO"><img src="https://avatars.githubusercontent.com/u/209568354?v=4" width="68" height="68" alt="@AndreIsraelAO" /><br /><sub><strong>AndreIsraelAO</strong></sub></a></td>
     <td align="center"><a href="https://github.com/anhnt256"><img src="https://avatars.githubusercontent.com/u/19179293?v=4" width="68" height="68" alt="@anhnt256" /><br /><sub><strong>anhnt256</strong></sub></a></td>
     <td align="center"><a href="https://github.com/AnushreeKasturi"><img src="https://avatars.githubusercontent.com/u/219416439?v=4" width="68" height="68" alt="@AnushreeKasturi" /><br /><sub><strong>AnushreeKasturi</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/arrafipd"><img src="https://avatars.githubusercontent.com/u/125668433?v=4" width="68" height="68" alt="@arrafipd" /><br /><sub><strong>arrafipd</strong></sub></a></td>
   </tr>
   <tr>
+    <td align="center"><a href="https://github.com/aryankalantri"><img src="https://avatars.githubusercontent.com/u/184456664?v=4" width="68" height="68" alt="@aryankalantri" /><br /><sub><strong>aryankalantri</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/dannyward630"><img src="https://avatars.githubusercontent.com/u/71604164?v=4" width="68" height="68" alt="@dannyward630" /><br /><sub><strong>dannyward630</strong></sub></a></td>
     <td align="center"><a href="https://github.com/HangMine"><img src="https://avatars.githubusercontent.com/u/32837290?v=4" width="68" height="68" alt="@HangMine" /><br /><sub><strong>HangMine</strong></sub></a></td>
     <td align="center"><a href="https://github.com/imsurya26"><img src="https://avatars.githubusercontent.com/u/219236223?v=4" width="68" height="68" alt="@imsurya26" /><br /><sub><strong>imsurya26</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/joshuaallgaier2-cmd"><img src="https://avatars.githubusercontent.com/u/285511128?v=4" width="68" height="68" alt="@joshuaallgaier2-cmd" /><br /><sub><strong>joshuaallgaier2-cmd</strong></sub></a></td>
     <td align="center"><a href="https://github.com/laozhej"><img src="https://avatars.githubusercontent.com/u/104217479?v=4" width="68" height="68" alt="@laozhej" /><br /><sub><strong>laozhej</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/Muhtasim-Munif-Fahim"><img src="https://avatars.githubusercontent.com/u/204097607?v=4" width="68" height="68" alt="@Muhtasim-Munif-Fahim" /><br /><sub><strong>Muhtasim-Munif-Fahim</strong></sub></a></td>
-    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
   </tr>
   <tr>
+    <td align="center"><a href="https://github.com/lj1166"><img src="https://avatars.githubusercontent.com/u/187236931?v=4" width="68" height="68" alt="@lj1166" /><br /><sub><strong>lj1166</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/mikeytenji"><img src="https://avatars.githubusercontent.com/u/316991671?v=4" width="68" height="68" alt="@mikeytenji" /><br /><sub><strong>mikeytenji</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/Muhtasim-Munif-Fahim"><img src="https://avatars.githubusercontent.com/u/204097607?v=4" width="68" height="68" alt="@Muhtasim-Munif-Fahim" /><br /><sub><strong>Muhtasim-Munif-Fahim</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/nova-loop"><img src="https://avatars.githubusercontent.com/u/332996007?v=4" width="68" height="68" alt="@nova-loop" /><br /><sub><strong>nova-loop</strong></sub></a></td>
     <td align="center"><a href="https://github.com/pemalama12"><img src="https://avatars.githubusercontent.com/u/221099317?v=4" width="68" height="68" alt="@pemalama12" /><br /><sub><strong>pemalama12</strong></sub></a></td>
+    <td align="center"><a href="https://github.com/prascli"><img src="https://avatars.githubusercontent.com/u/11029197?v=4" width="68" height="68" alt="@prascli" /><br /><sub><strong>prascli</strong></sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/sanketpatel32"><img src="https://avatars.githubusercontent.com/u/77952740?v=4" width="68" height="68" alt="@sanketpatel32" /><br /><sub><strong>sanketpatel32</strong></sub></a></td>
     <td align="center"><a href="https://github.com/Shellghostt"><img src="https://avatars.githubusercontent.com/u/144815351?v=4" width="68" height="68" alt="@Shellghostt" /><br /><sub><strong>Shellghostt</strong></sub></a></td>
     <td align="center"><a href="https://github.com/shishir2305"><img src="https://avatars.githubusercontent.com/u/87112493?v=4" width="68" height="68" alt="@shishir2305" /><br /><sub><strong>shishir2305</strong></sub></a></td>
     <td align="center"><a href="https://github.com/shoaibriazdev"><img src="https://avatars.githubusercontent.com/u/334688131?v=4" width="68" height="68" alt="@shoaibriazdev" /><br /><sub><strong>shoaibriazdev</strong></sub></a></td>
@@ -91,6 +99,30 @@
   <a href="https://adaptorch.com/?utm_source=github&utm_medium=readme&utm_campaign=omk-community#pricing">Plans</a> |
   <a href="https://adaptorch.com/claim-boundary?utm_source=github&utm_medium=readme&utm_campaign=omk-community">Claim boundary</a></sub>
 </p>
+
+<h3 align="center">AdaptOrch on arXiv</h3>
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2602.16873"><img alt="arXiv 2602.16873" src="https://img.shields.io/badge/arXiv-2602.16873-b31b1b?style=flat-square" /></a>
+  <a href="https://adaptorch.com/research/?utm_source=github&utm_medium=readme&utm_campaign=omk-community"><img alt="AdaptOrch research summary" src="https://img.shields.io/badge/adaptorch.com-research-111111?style=flat-square" /></a><br />
+  <em>AdaptOrch: Task-Adaptive Multi-Agent Orchestration in the Era of LLM Performance Convergence</em><br />
+  Geunbin Yu, 2026 · cs.MA
+</p>
+
+The paper routes each task to a parallel, sequential, hierarchical or hybrid
+topology from its dependency graph. It reports 12-23% over static
+single-topology baselines with the same underlying models.
+
+| Benchmark (paper Table 2) | Metric | Single best | AdaptOrch | Gain over single best |
+| :--- | :--- | ---: | ---: | ---: |
+| SWE-bench Verified (500) | pass@1 | 42.8 | **52.6** | +22.9% |
+| GPQA Diamond (198) | accuracy | 46.2 | **53.1** | +14.9% |
+| HotpotQA distractor (500) | F1 | 68.3 | **76.4** | +11.9% |
+
+<sub>Paper-reported results, not reproduced by OMK. Per the paper, a single top model with
+self-consistency voting at the same token budget (Self-MoA, matched) recovers 89% of the gain
+over single best. The paper limits its scope to three benchmarks and notes that results depend
+on decomposition quality. OMK does not call AdaptOrch by default.</sub>
 
 ---
 
