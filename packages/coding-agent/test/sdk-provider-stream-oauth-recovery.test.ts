@@ -1,4 +1,5 @@
 import { type Api, type AssistantMessage, getModel, type Model, type SimpleStreamOptions } from "omk-ai";
+import { registerOAuthProvider, unregisterOAuthProvider } from "omk-ai/oauth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mirrors compaction/oauth-recovery.ts: a main-turn dispatch whose bearer token the
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // re-issue once, instead of letting the dead token end the turn. The stream-level retry
 // lives inside createProviderStream, so the mock drives streamSimple's returned events.
 
-type IssuedCall = { apiKey: string | undefined };
+type IssuedCall = { apiKey: string | undefined; authorization: string | undefined };
 
 // Controlled by each test: which apiKey produces which terminal event.
 const behavior = vi.hoisted(() => ({
@@ -28,7 +29,7 @@ vi.mock("omk-ai", async (importOriginal) => {
 		...actual,
 		streamSimple: ((model: Model<Api>, _context: unknown, options?: SimpleStreamOptions) => {
 			const apiKey = options?.apiKey;
-			behavior.calls.push({ apiKey });
+			behavior.calls.push({ apiKey, authorization: options?.headers?.Authorization });
 			const stream = actual.createAssistantMessageEventStream();
 			const base: AssistantMessage = {
 				role: "assistant",
@@ -65,6 +66,8 @@ vi.mock("omk-ai", async (importOriginal) => {
 
 const { createSdkProviderStream } = await import("../src/core/sdk-provider-stream.ts");
 const { SettingsManager } = await import("../src/core/settings-manager.ts");
+const { AuthStorage } = await import("../src/core/auth-storage.ts");
+const { ModelRegistry } = await import("../src/core/model-registry.ts");
 
 const model = getModel("xai", "grok-4.7");
 
@@ -83,10 +86,7 @@ function fakeRegistry(opts: {
 	const calls = { refresh: [] as string[] };
 	const registry = {
 		async getApiKeyAndHeaders() {
-			return { ok: true as const, apiKey: opts.authApiKey, headers: undefined };
-		},
-		isUsingOAuthProvider() {
-			return opts.isOAuth;
+			return { ok: true as const, apiKey: opts.authApiKey, oauth: opts.isOAuth ? true : undefined };
 		},
 		async refreshRejectedOAuthToken(_m: Model<Api>, rejectedApiKey: string) {
 			calls.refresh.push(rejectedApiKey);
@@ -105,40 +105,72 @@ afterEach(() => {
 });
 
 describe("main-turn 401 forces one OAuth refresh and retry (parity with compaction)", () => {
-	it("401 token_expired -> refreshRejectedOAuthToken -> re-issue once with refreshed key", async () => {
-		const dead = terminalFor(
-			{
-				role: "assistant",
-				content: [],
-				api: model.api,
-				provider: model.provider,
-				model: model.id,
-				usage: {
-					input: 0,
-					output: 0,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 0,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	it.each(["oauth", "runtime-key", "explicit-header"])(
+		"retries only when OAuth supplied the request credential (%s)",
+		async (source) => {
+			const dead = terminalFor(
+				{
+					role: "assistant",
+					content: [],
+					api: model.api,
+					provider: model.provider,
+					model: model.id,
+					usage: {
+						input: 0,
+						output: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+						totalTokens: 0,
+						cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					},
+					stopReason: "error",
+					timestamp: 0,
+				} as AssistantMessage,
+				"401 token_expired",
+			);
+			const ok = { ...dead, stopReason: "stop" as const, errorMessage: undefined };
+			behavior.byKey.set("dead-key", [dead]);
+			behavior.byKey.set("fresh-key", [ok]);
+
+			const provider = "test-main-turn-oauth";
+			const storage = AuthStorage.inMemory({
+				[provider]: { type: "oauth", access: "dead-key", refresh: "test-refresh", expires: Date.now() + 60_000 },
+			});
+			const refreshToken = vi.fn(async (credentials: { access: string; refresh: string; expires: number }) => ({
+				...credentials,
+				access: "fresh-key",
+			}));
+			registerOAuthProvider({
+				id: provider,
+				name: "Test main-turn OAuth",
+				async login() {
+					throw new Error("Unexpected login");
 				},
-				stopReason: "error",
-				timestamp: 0,
-			} as AssistantMessage,
-			"401 token_expired",
-		);
-		const ok = { ...dead, stopReason: "stop" as const, errorMessage: undefined };
-		behavior.byKey.set("dead-key", [dead]);
-		behavior.byKey.set("fresh-key", [ok]);
-
-		const { registry, calls } = fakeRegistry({ authApiKey: "dead-key", isOAuth: true, refreshedKey: "fresh-key" });
-		const stream = createSdkProviderStream({ modelRegistry: registry, settingsManager: SettingsManager.inMemory() });
-		const final = await (await stream(model, baseContext(), {})).result();
-
-		expect(calls.refresh).toEqual(["dead-key"]);
-		// Two dispatches: first with dead-key, retry with fresh-key.
-		expect(behavior.calls.map((c) => c.apiKey)).toEqual(["dead-key", "fresh-key"]);
-		expect(final.stopReason).toBe("stop");
-	});
+				getApiKey: (credentials) => credentials.access,
+				refreshToken,
+			});
+			try {
+				const registry = ModelRegistry.create(storage);
+				registry.registerProvider(provider, { authHeader: true });
+				if (source === "runtime-key") storage.setRuntimeApiKey(provider, "dead-key");
+				const headers = source === "explicit-header" ? { Authorization: "Bearer explicit" } : undefined;
+				const shouldRefresh = source === "oauth";
+				const stream = createSdkProviderStream({
+					modelRegistry: registry,
+					settingsManager: SettingsManager.inMemory(),
+				});
+				const final = await (await stream({ ...model, provider }, baseContext(), { headers })).result();
+				expect(behavior.calls).toEqual([
+					{ apiKey: "dead-key", authorization: headers?.Authorization ?? "Bearer dead-key" },
+					...(shouldRefresh ? [{ apiKey: "fresh-key", authorization: "Bearer fresh-key" }] : []),
+				]);
+				expect(refreshToken).toHaveBeenCalledTimes(shouldRefresh ? 1 : 0);
+				expect(final.stopReason).toBe(shouldRefresh ? "stop" : "error");
+			} finally {
+				unregisterOAuthProvider(provider);
+			}
+		},
+	);
 
 	it("refresh rejected (RFC6749) -> /login hint, no second dispatch", async () => {
 		const dead = terminalFor(

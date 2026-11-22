@@ -15,7 +15,7 @@ import type { AuthStorage } from "./auth-storage.ts";
 import { rejectedOAuthLoginMessage, unresolvedOAuthLoginMessage } from "./credential-resolution-failure.ts";
 import { resolveConfigValueOrThrow } from "./resolve-config-value.ts";
 
-export type ProviderRequestKey = { ok: true; apiKey: string | undefined } | { ok: false; error: string };
+export type ProviderRequestKey = { ok: true; apiKey: string | undefined; oauth?: true } | { ok: false; error: string };
 
 /** Selected account of a stored OAuth login whose provider is registered in this process. */
 function getStoredOAuthLogin(authStorage: AuthStorage, provider: string): OAuthCredentials | undefined {
@@ -41,7 +41,7 @@ export function resolveUnresolvedOAuthLogin(
 	const account = getStoredOAuthLogin(authStorage, provider);
 	if (!account) return undefined;
 	const apiKey = getUnexpiredOAuthApiKey(provider, account);
-	if (apiKey !== undefined) return { ok: true, apiKey };
+	if (apiKey !== undefined) return { ok: true, apiKey, oauth: true };
 	// A store that could not be read keeps its own message: /login cannot clear a read failure.
 	if (authStorage.hasLoadError()) return { ok: true, apiKey: undefined };
 	// A refused refresh ends the turn at once; the other failures are retried by the agent loop.
@@ -55,11 +55,11 @@ export async function resolveProviderRequestKey(
 	modelsJsonApiKey: string | undefined,
 	options?: { minRemainingMs?: number },
 ): Promise<ProviderRequestKey> {
-	const stored = await authStorage.getApiKey(provider, {
+	const stored = await authStorage.resolveApiKey(provider, {
 		includeFallback: false,
 		minRemainingMs: options?.minRemainingMs,
 	});
-	if (stored !== undefined) return { ok: true, apiKey: stored };
+	if (stored !== undefined) return { ok: true, ...stored };
 
 	const login = resolveUnresolvedOAuthLogin(authStorage, provider);
 	if (login) return login;
