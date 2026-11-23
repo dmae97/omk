@@ -166,6 +166,7 @@ export async function finalizeExecutedToolCall(options: FinalizeToolCallOptions)
 		isError = true;
 		syntheticFailure = true;
 	}
+	const initialSnapshot = result;
 
 	if (terminalDisposition === undefined && signal?.aborted) {
 		terminalDisposition = "aborted";
@@ -208,7 +209,9 @@ export async function finalizeExecutedToolCall(options: FinalizeToolCallOptions)
 		}
 	}
 
-	if (terminalDisposition === undefined) {
+	if (terminalDisposition !== undefined) {
+		isError = true;
+	} else if (!syntheticFailure && result !== initialSnapshot) {
 		try {
 			result = createValidatedToolResultSnapshot(result);
 		} catch (error) {
@@ -218,8 +221,6 @@ export async function finalizeExecutedToolCall(options: FinalizeToolCallOptions)
 			isError = true;
 			syntheticFailure = true;
 		}
-	} else {
-		isError = true;
 	}
 	const envelope =
 		terminalDisposition !== undefined

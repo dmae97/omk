@@ -9,6 +9,7 @@ import {
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { runAgentLoop } from "../src/agent-loop.ts";
+import { finalizeExecutedToolCall } from "../src/tool-execution-boundary.ts";
 import type {
 	AfterToolCallResult,
 	AgentContext,
@@ -131,6 +132,37 @@ function results(messages: readonly AgentMessage[]): ToolResultMessage[] {
 function lifecycle(events: readonly AgentEvent[], type: "tool_execution_start" | "tool_execution_end"): string[] {
 	return events.flatMap((event) => (event.type === type ? [event.toolCallId] : []));
 }
+
+it.each([false, true])("reuses only the validated tool snapshot when rewrite=%s", async (rewrite) => {
+	const raw = { rows: ["original"] };
+	const replacement = { rows: ["replacement"] };
+	let observed: unknown;
+	const { result, envelope } = await finalizeExecutedToolCall({
+		currentContext: { systemPrompt: "", messages: [] },
+		assistantMessage: assistant([], "toolUse"),
+		prepared: { toolCall: { type: "toolCall", id: "test", name: "read", arguments: {} }, args: {}, timeoutMs: 1000 },
+		executed: {
+			result: { content: [{ type: "text", text: "done" }], details: raw },
+			isError: false,
+			executionStarted: true,
+			isRealPromiseSettled: () => true,
+			commitTerminal: () => {},
+		},
+		afterToolCall: async ({ result }) => {
+			observed = result.details;
+			return rewrite ? { details: replacement } : undefined;
+		},
+		signal: undefined,
+	});
+
+	raw.rows.push("later");
+	replacement.rows.push("later");
+	expect(envelope.disposition).toBe("completed");
+	expect(observed).toEqual({ rows: ["original"] });
+	expect(result.details).toEqual({ rows: [rewrite ? "replacement" : "original"] });
+	if (!rewrite) expect(result.details).toBe(observed);
+	expect(Object.isFrozen(result.details)).toBe(true);
+});
 
 describe("tool execution abort boundary", () => {
 	it.each([

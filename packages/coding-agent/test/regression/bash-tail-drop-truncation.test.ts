@@ -85,6 +85,28 @@ describe("bash executor tail-drop truncation", () => {
 		expect(result.fullOutputPath).toBeUndefined();
 	});
 
+	it("preserves streamed and saved output with empty sanitized chunks and split UTF-8", async () => {
+		const prefix = "앞\t줄\n";
+		const suffix = `🙂${"x".repeat(DEFAULT_MAX_BYTES)}끝`;
+		const body = Buffer.from(suffix);
+		const chunks = [
+			Buffer.from(prefix),
+			Buffer.from("\u001b[31m\u0000\r\ufff9"),
+			body.subarray(0, 2),
+			body.subarray(2),
+		];
+		const updates: string[] = [];
+		const result = await executeBashWithOperations("x", "/", opsFromChunks(chunks), {
+			onChunk: (text) => updates.push(text),
+		});
+		if (!result.fullOutputPath) throw new Error("missing full output");
+		spills.push(result.fullOutputPath);
+		expect(updates).toEqual([prefix, "", "", suffix]);
+		expect(result.truncated).toBe(true);
+		expect(result.output.endsWith("끝")).toBe(true);
+		expect(readFileSync(result.fullOutputPath, "utf-8")).toBe(prefix + suffix);
+	});
+
 	it("reports truncated: true, keeps the tail and the full spill file on the cancelled path too", async () => {
 		const line = `${"a".repeat(78 * 1024)}${"b".repeat(42 * 1024 - 8)}TAIL-END`;
 		const buf = Buffer.from(line);

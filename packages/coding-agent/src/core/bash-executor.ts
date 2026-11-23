@@ -127,6 +127,11 @@ export async function executeBashWithOperations(
 			ensureTempFile();
 		}
 
+		if (!text) {
+			options?.onChunk?.(text);
+			return;
+		}
+
 		if (tempFileStream) {
 			tempFileStream.write(text);
 		}

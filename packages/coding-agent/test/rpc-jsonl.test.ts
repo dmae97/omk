@@ -62,4 +62,31 @@ describe("RPC JSONL framing", () => {
 
 		expect(lines).toEqual(['{"a":1}']);
 	});
+
+	test("assembles a fragmented UTF-8 record and preserves subsequent LF records", async () => {
+		const first = Buffer.from('{"text":"한\u2028글"}\r');
+		const chunks = Array.from(first, (byte) => Buffer.from([byte]));
+		const stream = Readable.from([...chunks, Buffer.from('\n\n{"tail":true}')]);
+		const lines: string[] = [];
+		const done = new Promise<void>((resolve) => stream.once("end", resolve));
+		attachJsonlLineReader(stream, (line) => lines.push(line));
+
+		await done;
+
+		expect(lines).toEqual(['{"text":"한\u2028글"}', "", '{"tail":true}']);
+	});
+
+	test("detaching inside a callback discards the rest of that chunk", async () => {
+		const stream = Readable.from(["first\nsecond\npartial"]);
+		const lines: string[] = [];
+		const done = new Promise<void>((resolve) => stream.once("end", resolve));
+		const detach = attachJsonlLineReader(stream, (line) => {
+			lines.push(line);
+			detach();
+		});
+
+		await done;
+
+		expect(lines).toEqual(["first"]);
+	});
 });

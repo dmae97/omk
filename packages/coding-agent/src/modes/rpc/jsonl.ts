@@ -20,38 +20,45 @@ export function serializeJsonLine(value: unknown): string {
  */
 export function attachJsonlLineReader(stream: Readable, onLine: (line: string) => void): () => void {
 	const decoder = new StringDecoder("utf8");
-	let buffer = "";
+	let fragments: string[] = [];
+	let attached = true;
 
-	const emitLine = (line: string) => {
+	const emitLine = (tail: string) => {
+		let line = tail;
+		if (fragments.length > 0) {
+			fragments.push(tail);
+			line = fragments.join("");
+			fragments = [];
+		}
 		onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
 	};
 
 	const onData = (chunk: string | Buffer) => {
-		buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-
-		while (true) {
-			const newlineIndex = buffer.indexOf("\n");
-			if (newlineIndex === -1) {
+		const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
+		let start = 0;
+		while (attached) {
+			const newline = text.indexOf("\n", start);
+			if (newline === -1) {
+				// Avoid flattening the unfinished line on every read.
+				if (start < text.length) fragments.push(text.slice(start));
 				return;
 			}
-
-			emitLine(buffer.slice(0, newlineIndex));
-			buffer = buffer.slice(newlineIndex + 1);
+			emitLine(text.slice(start, newline));
+			start = newline + 1;
 		}
 	};
 
 	const onEnd = () => {
-		buffer += decoder.end();
-		if (buffer.length > 0) {
-			emitLine(buffer);
-			buffer = "";
-		}
+		const tail = decoder.end();
+		if (attached && (fragments.length > 0 || tail)) emitLine(tail);
 	};
 
 	stream.on("data", onData);
 	stream.on("end", onEnd);
 
 	return () => {
+		attached = false;
+		fragments = [];
 		stream.off("data", onData);
 		stream.off("end", onEnd);
 	};
