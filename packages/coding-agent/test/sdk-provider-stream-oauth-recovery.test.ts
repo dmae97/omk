@@ -14,6 +14,7 @@ const behavior = vi.hoisted(() => ({
 	// map from apiKey -> array of events pushed by that dispatch's inner stream
 	byKey: new Map<string | undefined, AssistantMessage[]>(),
 	calls: [] as IssuedCall[],
+	endMode: "event" as "event" | "result" | "empty",
 	// keys whose dispatch emits a "start" event before its terminal event
 	startedKeys: new Set<string | undefined>(),
 }));
@@ -52,6 +53,10 @@ vi.mock("omk-ai", async (importOriginal) => {
 				const outcome = behavior.byKey.get(apiKey);
 				const final = outcome?.[0] ?? base;
 				if (behavior.startedKeys.has(apiKey)) stream.push({ type: "start", partial: { ...final, content: [] } });
+				if (behavior.endMode !== "event") {
+					stream.end(behavior.endMode === "result" ? final : undefined);
+					return;
+				}
 				if (final.stopReason === "error" || final.stopReason === "aborted") {
 					stream.push({ type: "error", reason: final.stopReason, error: final });
 				} else {
@@ -102,9 +107,26 @@ afterEach(() => {
 	behavior.byKey.clear();
 	behavior.startedKeys.clear();
 	behavior.calls.length = 0;
+	behavior.endMode = "event";
 });
 
 describe("main-turn 401 forces one OAuth refresh and retry (parity with compaction)", () => {
+	it.each(["result", "empty"] as const)(
+		"settles OAuth streams that close without a terminal event (%s)",
+		async (mode) => {
+			behavior.endMode = mode;
+			const { registry, calls } = fakeRegistry({ authApiKey: "local-key", isOAuth: true });
+			const stream = createSdkProviderStream({
+				modelRegistry: registry,
+				settingsManager: SettingsManager.inMemory(),
+			});
+			const response = await stream(model, baseContext());
+			const final = await response.result();
+			expect(final.stopReason).toBe(mode === "result" ? "stop" : "error");
+			if (mode === "empty") expect(final.errorMessage).toContain("Stream ended without a final result");
+			expect(calls.refresh).toEqual([]);
+		},
+	);
 	it.each(["oauth", "runtime-key", "explicit-header"])(
 		"retries only when OAuth supplied the request credential (%s)",
 		async (source) => {

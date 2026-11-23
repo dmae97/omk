@@ -198,9 +198,8 @@ function dispatchWithRejectedOAuthRecovery(
 			outer.push(event);
 			return;
 		}
-		// A non-compliant stream that ended without a terminal event would leave
-		// outer.result() pending forever; settle it defensively.
-		outer.end();
+		// Preserve providers that return an explicit result without a terminal event.
+		outer.end(await stream.result());
 	};
 
 	void pump(issue(apiKey), apiKey).catch((error) => {
