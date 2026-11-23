@@ -8,6 +8,7 @@ import {
 	type EvidenceLifecycleReport,
 	evidenceLifecycleObserveEnabled,
 } from "./evidence-lifecycle.ts";
+import { dropEvidencePruneHolds } from "./evidence-lifecycle-delete.ts";
 import { evidenceLifecycleReport } from "./evidence-lifecycle-report.ts";
 import { withEvidenceSession } from "./evidence-lifecycle-scope.ts";
 import { SessionShutdown } from "./session-shutdown.ts";
@@ -65,7 +66,9 @@ export function evidenceScope<T>(source: SessionIdSource, runner: OperationRunne
 
 /** Session disposed: drop its registry key (records only; files untouched). */
 export function dropSessionEvidence(source: SessionIdSource): void {
-	dropEvidenceSession(source.getSessionId());
+	const sessionId = source.getSessionId();
+	dropEvidenceSession(sessionId);
+	dropEvidencePruneHolds(sessionId);
 }
 
 type EvidenceSink = Parameters<typeof appendEvidenceLifecycleEntry>[0];

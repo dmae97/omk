@@ -197,6 +197,10 @@ export function evidencePruneHold(path: string): readonly string[] | undefined {
 	return reasons;
 }
 
+export function dropEvidencePruneHolds(sessionId: string): void {
+	heldBySession.delete(sessionId);
+}
+
 export function evidenceHeldStats(sessionId: string): {
 	heldBytes: number;
 	heldCount: number;
@@ -204,12 +208,12 @@ export function evidenceHeldStats(sessionId: string): {
 } {
 	const heldReasons: Record<string, number> = {};
 	let heldBytes = 0;
-	const held = [...(heldBySession.get(sessionId)?.values() ?? [])];
-	for (const entry of held) {
+	const held = heldBySession.get(sessionId);
+	for (const entry of held?.values() ?? []) {
 		heldBytes += entry.bytes;
 		for (const reason of entry.reasons) heldReasons[reason] = (heldReasons[reason] ?? 0) + 1;
 	}
-	return { heldBytes, heldCount: held.length, heldReasons };
+	return { heldBytes, heldCount: held?.size ?? 0, heldReasons };
 }
 
 export type EvidenceLookupState = "present" | "deleted_after_use" | "missing_unexpectedly";
