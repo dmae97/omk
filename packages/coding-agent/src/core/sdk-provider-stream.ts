@@ -14,7 +14,7 @@ import {
 	type SimpleStreamOptions,
 	streamSimple,
 } from "omk-ai";
-import { isRejectedOAuthTokenMessage } from "./compaction/oauth-recovery.ts";
+import { formatOAuthRecoveryFailure, isRejectedOAuthTokenMessage } from "./compaction/oauth-recovery.ts";
 import { isDefaultOnEnvFlag } from "./env-flag.ts";
 import { createJsonSessionInfoStreamFn } from "./json-session-info.ts";
 import { createLlmCallRunLogStreamFn } from "./llm-call-run-log.ts";
@@ -174,16 +174,11 @@ function dispatchWithRejectedOAuthRecovery(
 				let refreshed: string | undefined;
 				try {
 					refreshed = await modelRegistry.refreshRejectedOAuthToken(model, sentKey);
-				} catch (refreshError) {
-					// Refresh refused/failed (RFC6749): surface the original rejection with
-					// the /login hint, matching the compaction recovery contract.
-					rejected.errorMessage =
-						`${rejected.errorMessage ?? "Provider rejected the token"} ` +
-						`(OAuth refresh for ${model.provider} failed: ` +
-						`${refreshError instanceof Error ? refreshError.message : String(refreshError)}; ` +
-						`run '/login ${model.provider}')`;
-					outer.push({ ...event, error: rejected });
-					outer.end();
+				} catch {
+					outer.push({
+						...event,
+						error: { ...rejected, errorMessage: formatOAuthRecoveryFailure(model.provider) },
+					});
 					return;
 				}
 				if (refreshed !== undefined) {

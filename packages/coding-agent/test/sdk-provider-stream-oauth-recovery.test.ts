@@ -213,14 +213,14 @@ describe("main-turn 401 forces one OAuth refresh and retry (parity with compacti
 				stopReason: "error",
 				timestamp: 0,
 			} as AssistantMessage,
-			"401 token_expired",
+			"401 token_expired: fixture-access-value",
 		);
 		behavior.byKey.set("dead-key", [dead]);
 
 		const { registry, calls } = fakeRegistry({
 			authApiKey: "dead-key",
 			isOAuth: true,
-			refreshError: new Error("invalid_grant"),
+			refreshError: new Error("invalid_grant: fixture-refresh-value"),
 		});
 		const stream = createSdkProviderStream({ modelRegistry: registry, settingsManager: SettingsManager.inMemory() });
 		const final = await (await stream(model, baseContext(), {})).result();
@@ -228,8 +228,10 @@ describe("main-turn 401 forces one OAuth refresh and retry (parity with compacti
 		expect(calls.refresh).toEqual(["dead-key"]);
 		expect(behavior.calls).toHaveLength(1); // no re-issue
 		expect(final.stopReason).toBe("error");
-		expect(final.errorMessage).toContain("OAuth refresh for xai failed");
-		expect(final.errorMessage).toContain("/login xai");
+		expect(final.errorMessage).toBe(
+			"Provider rejected the OAuth credential. OAuth refresh for xai failed; run '/login xai'.",
+		);
+		expect(dead.errorMessage).toBe("401 token_expired: fixture-access-value");
 	});
 
 	it("non-OAuth provider rejected key -> forwarded as-is, no refresh attempt", async () => {
