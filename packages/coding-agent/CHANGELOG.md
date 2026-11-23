@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-11-23
+
+### Fixed
+
+- Release in-memory evidence deletion holds when a session closes.
+- Report a provider stream that closes without a final result instead of leaving the turn pending.
+- Show a `/login` hint without leaking a failed OAuth refresh's raw error during a turn or compaction.
+- Avoid repeated transcript normalization in session search and redundant status panel serialization while a frame is in flight.
+
 ## [2.0.3] - 2026-11-22
 
 ### Changed

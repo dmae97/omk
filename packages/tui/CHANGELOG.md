@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-11-23
+
+### Changed
+
+- Allow fuzzy searches to reuse lowercased text across multiple terms.
+
 ## [2.0.3] - 2026-11-22
 
 ### Added
