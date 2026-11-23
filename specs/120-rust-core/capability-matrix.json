@@ -113,6 +113,13 @@
 			"note": "Interactive-only surface; RPC exposes its own command set"
 		},
 		{
+			"id": "slash.open",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/open` command",
+			"note": "Requires an interactive local desktop; RPC does not launch desktop applications"
+		},
+		{
 			"id": "slash.think",
 			"disposition": "refused",
 			"stage": "K6",

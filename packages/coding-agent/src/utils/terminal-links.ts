@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { win32 } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { posix, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { normalizePath, resolvePath } from "./paths.ts";
 
@@ -13,7 +13,8 @@ export function terminalFileUrl(path: string, cwd: string, options: TerminalLink
 	const env = options.env ?? process.env;
 	const platform = options.platform ?? process.platform;
 	if (/^[a-z]:[\\/]|^\\\\/i.test(path)) return pathToFileURL(path, { windows: true }).href;
-	const absolute = platform === "win32" ? win32.resolve(cwd, normalizePath(path)) : resolvePath(path, cwd);
+	const pathApi = platform === "win32" ? win32 : posix;
+	const absolute = pathApi.resolve(cwd, normalizePath(path));
 	const distro = env.WSL_DISTRO_NAME;
 	if (platform === "linux" && distro && !env.SSH_CONNECTION && !env.SSH_TTY && !/[\\/\x00-\x1f]/.test(distro)) {
 		const drive = /^\/mnt\/([a-z])(?:\/|$)/i.exec(absolute);
@@ -55,9 +56,18 @@ export function terminalMarkdownLinks(cwd: string, options: TerminalLinkEnvironm
 		},
 		resolveFileLink(text: string): string | undefined {
 			if (/^[a-z][a-z\d+.-]*:/i.test(text) && !/^[a-z]:[\\/]/i.test(text)) return undefined;
-			if (/[\x00-\x1f\x7f]/.test(text) || (!/[\\/]/.test(text) && !/\.[a-z\d]{1,10}$/i.test(text))) return undefined;
+			if (!text || /[\x00-\x1f\x7f]/.test(text)) return undefined;
 			const path = resolvePath(text, cwd);
-			return existsSync(path) ? terminalFileUrl(text, cwd, options) : undefined;
+			if (/[\\/]/.test(text) || /\.[a-z\d]{1,10}$/i.test(text)) {
+				return existsSync(path) ? terminalFileUrl(text, cwd, options) : undefined;
+			}
+			try {
+				return statSync(path, { throwIfNoEntry: false })?.isDirectory()
+					? terminalFileUrl(text, cwd, options)
+					: undefined;
+			} catch {
+				return undefined;
+			}
 		},
 	};
 }

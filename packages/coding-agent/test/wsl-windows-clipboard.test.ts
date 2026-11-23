@@ -27,6 +27,16 @@ beforeEach(() => {
 	mocks.spawnSync.mockReturnValue({ status: 1, stdout: Buffer.alloc(0) });
 });
 
+it("reads native Windows clipboard PNG when the optional addon is absent", async () => {
+	mocks.execFile.mockImplementation((_command, _args, _options, callback) =>
+		callback(null, `OMK_CLIPBOARD_PNG:${PNG}`),
+	);
+	const image = await readClipboardImage({ platform: "win32", env: {} });
+	expect(image).toEqual({ bytes: Buffer.from(PNG, "base64"), mimeType: "image/png" });
+	expect(mocks.execFile.mock.calls.map(([command]) => command)).toEqual([
+		"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+	]);
+});
 describe("Windows capture to WSL prompt", () => {
 	it("reads Windows PNG in memory asynchronously before any stale Linux clipboard", async () => {
 		// Given a Windows screenshot, when image paste is requested.

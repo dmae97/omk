@@ -130,6 +130,7 @@ import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/cha
 import { copyToClipboard } from "../../utils/clipboard.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
+import { runOpenPathCommand } from "../../utils/open-local-path.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
@@ -2773,7 +2774,7 @@ export class InteractiveMode {
 			}
 		};
 
-		// File-only bracketed pastes attach images; normal text follows the editor's paste path.
+		// Empty paste frames can represent an image paste; nonempty text still follows the editor's paste path.
 		this.defaultEditor.onPaste = (text) => this.attachmentDraft.paste(text);
 		this.defaultEditor.onPasteImage = () => void this.handleClipboardImagePaste();
 	}
@@ -2815,10 +2816,6 @@ export class InteractiveMode {
 		return Array.isArray(model?.input) ? model.input.includes("image") : true;
 	}
 
-	private async handleAttachCommand(argument: string): Promise<void> {
-		await this.attachmentDraft.command(argument);
-	}
-
 	private parseBangInput(text: string): BangInvocation {
 		return parseBangInvocation(text.trim(), {
 			hasSkill: (name) => this.session.resourceLoader.getSkills().skills.some((skill) => skill.name === name),
@@ -2841,6 +2838,8 @@ export class InteractiveMode {
 			if (!text && !hasAttachments) return;
 
 			// Handle commands
+			if (/^\/open(?: |$)/.test(text))
+				return runOpenPathCommand(text, this.session.sessionManager.getCwd(), this.showWarning.bind(this));
 			if (text === "/skills" || text.startsWith("/skills ")) {
 				this.editor.setText("");
 				this.showSkillPicker(text.slice("/skills".length).trim());
@@ -2848,7 +2847,7 @@ export class InteractiveMode {
 			}
 			if (text === "/attach" || text.startsWith("/attach ")) {
 				this.editor.setText("");
-				await this.handleAttachCommand(text.slice("/attach".length).trim());
+				await this.attachmentDraft.command(text.slice("/attach".length).trim());
 				return;
 			}
 			if (text === "/settings") {

@@ -7,8 +7,12 @@ import { terminalFileUrl } from "../../../utils/terminal-links.ts";
 import type { Theme } from "../theme/theme.ts";
 
 export function linkPath(styledText: string, rawPath: string, cwd: string): string {
-	if (!getCapabilities().hyperlinks) return styledText;
-	return hyperlink(styledText, terminalFileUrl(rawPath, cwd));
+	try {
+		const url = terminalFileUrl(rawPath, cwd);
+		return getCapabilities().hyperlinks ? hyperlink(styledText, url) : `${styledText} (${url})`;
+	} catch {
+		return styledText;
+	}
 }
 
 export function getTextOutput(

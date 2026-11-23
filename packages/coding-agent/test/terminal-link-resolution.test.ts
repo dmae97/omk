@@ -70,6 +70,19 @@ describe("terminal link resolution", () => {
 		expect(links.resolveFileLink("a / b")).toBeUndefined();
 	});
 
+	it("links bare folder names and preserves long macOS paths with spaces and literal #", () => {
+		const root = mkdtempSync(join(tmpdir(), "omk-links-"));
+		temporary.push(root);
+		mkdirSync(join(root, "reports"));
+		writeFileSync(join(root, "ordinary"), "not a directory");
+		const links = terminalMarkdownLinks(root);
+		expect(links.resolveFileLink("reports")).toBe(terminalFileUrl("reports", root));
+		expect(links.resolveFileLink("ordinary")).toBeUndefined();
+		const folder = "긴 폴더 #1 ".repeat(10).trimEnd();
+		expect(terminalFileUrl(`${folder}/screen.png`, "/Users/omk", { platform: "darwin", env: {} })).toBe(
+			`file:///Users/omk/${encodeURIComponent(folder)}/screen.png`,
+		);
+	});
 	it("rejects control characters and malformed file URLs without throwing", () => {
 		const links = terminalMarkdownLinks("/projects/app", wsl);
 		expect(links.resolveLink("bad\x1b]8;;target")).toBeUndefined();
