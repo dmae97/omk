@@ -1,4 +1,4 @@
-import { fuzzyMatch } from "omk-tui";
+import { fuzzyMatchLowercaseText } from "omk-tui";
 import type { SessionInfo } from "../../../core/session-manager.ts";
 
 export type SortMode = "threaded" | "recent" | "relevance";
@@ -19,8 +19,8 @@ export interface MatchResult {
 	score: number;
 }
 
-function normalizeWhitespaceLower(text: string): string {
-	return text.toLowerCase().replace(/\s+/g, " ").trim();
+function normalizeWhitespace(text: string): string {
+	return text.replace(/\s+/g, " ").trim();
 }
 
 function getSessionSearchText(session: SessionInfo): string {
@@ -129,15 +129,16 @@ export function matchSession(session: SessionInfo, parsed: ParsedSearchQuery): M
 		return { matches: true, score: 0 };
 	}
 
+	const textLower = text.toLowerCase();
 	let totalScore = 0;
 	let normalizedText: string | null = null;
 
 	for (const token of parsed.tokens) {
 		if (token.kind === "phrase") {
 			if (normalizedText === null) {
-				normalizedText = normalizeWhitespaceLower(text);
+				normalizedText = normalizeWhitespace(textLower);
 			}
-			const phrase = normalizeWhitespaceLower(token.value);
+			const phrase = normalizeWhitespace(token.value.toLowerCase());
 			if (!phrase) continue;
 			const idx = normalizedText.indexOf(phrase);
 			if (idx < 0) return { matches: false, score: 0 };
@@ -145,7 +146,7 @@ export function matchSession(session: SessionInfo, parsed: ParsedSearchQuery): M
 			continue;
 		}
 
-		const m = fuzzyMatch(token.value, text);
+		const m = fuzzyMatchLowercaseText(token.value, textLower);
 		if (!m.matches) return { matches: false, score: 0 };
 		totalScore += m.score;
 	}

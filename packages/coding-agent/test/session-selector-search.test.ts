@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { SessionInfo } from "../src/core/session-manager.ts";
 import { filterAndSortSessions } from "../src/modes/interactive/components/session-selector-search.ts";
 
@@ -19,6 +19,25 @@ function makeSession(
 }
 
 describe("session selector search", () => {
+	it("lowercases a large transcript once for a mixed-token query without changing matches", () => {
+		const transcript = `ALPHA  BRAVO  CHARLIE ${"UPPERCASE ".repeat(10_000)}`;
+		const session = makeSession({ id: "session", modified: new Date(0), allMessagesText: transcript });
+		const original = String.prototype.toLowerCase;
+		let normalizations = 0;
+		const lowerCase = vi.spyOn(String.prototype, "toLowerCase").mockImplementation(function (this: string) {
+			if (this.length >= transcript.length) normalizations++;
+			return original.call(this);
+		});
+		let result: SessionInfo[];
+		try {
+			result = filterAndSortSessions([session], 'alpha "bravo charlie" charlie', "relevance");
+		} finally {
+			lowerCase.mockRestore();
+		}
+		expect(result).toEqual([session]);
+		expect(normalizations).toBe(1);
+	});
+
 	it("filters by quoted phrase with whitespace normalization", () => {
 		const sessions: SessionInfo[] = [
 			makeSession({

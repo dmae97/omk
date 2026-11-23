@@ -30,7 +30,7 @@ export { TruncatedText } from "./components/truncated-text.ts";
 // Editor component interface (for custom editors)
 export type { EditorComponent } from "./editor-component.ts";
 // Fuzzy matching
-export { type FuzzyMatch, fuzzyFilter, fuzzyMatch } from "./fuzzy.ts";
+export { type FuzzyMatch, fuzzyFilter, fuzzyMatch, fuzzyMatchLowercaseText } from "./fuzzy.ts";
 // Keybindings
 export {
 	getKeybindings,
