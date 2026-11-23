@@ -1,0 +1,97 @@
+name: Standalone native smoke
+
+on:
+  push:
+    branches: [qa/standalone-native]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+    env:
+      COREPACK_HOME: /tmp/omk-corepack
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.3.14
+          no-cache: true
+      - name: Build release archives
+        id: package
+        run: |
+          corepack enable npm
+          corepack prepare npm@11.14.1 --activate
+          test "$(npm --version)" = 11.14.1
+          ./scripts/build-binaries.sh --out "$RUNNER_TEMP/archives"
+          echo "version=$(node -p 'require("./packages/coding-agent/package.json").version')" >> "$GITHUB_OUTPUT"
+          cd "$RUNNER_TEMP/archives"
+          sha256sum omk-*.tar.gz omk-*.zip > SHA256SUMS
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: standalone-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/archives/omk-*.tar.gz
+            ${{ runner.temp }}/archives/omk-*.zip
+            ${{ runner.temp }}/archives/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  native:
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, target: linux-x64, archive: omk-linux-x64.tar.gz}
+          - {runner: ubuntu-24.04-arm, target: linux-arm64, archive: omk-linux-arm64.tar.gz}
+          - {runner: macos-15-intel, target: darwin-x64, archive: omk-darwin-x64.tar.gz}
+          - {runner: macos-15, target: darwin-arm64, archive: omk-darwin-arm64.tar.gz}
+          - {runner: windows-2025, target: windows-x64, archive: omk-windows-x64.zip}
+          - {runner: windows-11-arm, target: windows-arm64, archive: omk-windows-arm64.zip}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: standalone-${{ github.sha }}
+          path: ${{ runner.temp }}/archives
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
+      - name: Run the extracted executable
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          OMK_SMOKE_ARCHIVE: ${{ matrix.archive }}
+          OMK_SMOKE_TARGET: ${{ matrix.target }}
+          OMK_SMOKE_VERSION: ${{ needs.build.outputs.version }}
+        run: >-
+          python scripts/standalone-native-smoke.py
+          "$RUNNER_TEMP/archives/$OMK_SMOKE_ARCHIVE" "$OMK_SMOKE_TARGET" "$OMK_SMOKE_VERSION"
+      - name: Run the extracted Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OMK_SMOKE_ARCHIVE: ${{ matrix.archive }}
+          OMK_SMOKE_TARGET: ${{ matrix.target }}
+          OMK_SMOKE_VERSION: ${{ needs.build.outputs.version }}
+        run: >-
+          python scripts/standalone-native-smoke.py
+          "$env:RUNNER_TEMP/archives/$env:OMK_SMOKE_ARCHIVE" "$env:OMK_SMOKE_TARGET" "$env:OMK_SMOKE_VERSION"
