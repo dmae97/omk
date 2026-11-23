@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-11-23
+
+### Fixed
+
+- Reject `result()` when an event stream ends without a final result, while preserving explicit results.
+
 ## [2.0.3] - 2026-11-22
 
 ## [2.0.2] - 2026-11-21

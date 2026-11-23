@@ -8,14 +8,16 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 	private done = false;
 	private finalResultPromise: Promise<R>;
 	private resolveFinalResult!: (result: R) => void;
+	private rejectFinalResult!: (error: Error) => void;
 	private isComplete: (event: T) => boolean;
 	private extractResult: (event: T) => R;
 
 	constructor(isComplete: (event: T) => boolean, extractResult: (event: T) => R) {
 		this.isComplete = isComplete;
 		this.extractResult = extractResult;
-		this.finalResultPromise = new Promise((resolve) => {
+		this.finalResultPromise = new Promise((resolve, reject) => {
 			this.resolveFinalResult = resolve;
+			this.rejectFinalResult = reject;
 		});
 	}
 
@@ -35,8 +37,15 @@ export class EventStream<T, R = T> implements AsyncIterable<T> {
 	}
 
 	end(result?: R): void {
-		this.done = true;
-		if (result !== undefined) this.resolveFinalResult(result);
+		if (!this.done) {
+			this.done = true;
+			if (result !== undefined) this.resolveFinalResult(result);
+			else {
+				// Iterator-only consumers never observe the result promise.
+				void this.finalResultPromise.catch(() => {});
+				this.rejectFinalResult(new Error("Stream ended without a final result"));
+			}
+		}
 		for (const waiter of this.waiting) waiter({ value: undefined, done: true });
 	}
 

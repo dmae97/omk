@@ -33,6 +33,25 @@ it("preserves the async-iterable iterator API and explicit return value", async 
 });
 
 describe("event stream ownership and FIFO", () => {
+	it("settles pending and late result readers when a producer ends without a result", async () => {
+		const stream = createStream();
+		const iterator = stream[Symbol.asyncIterator]();
+		const next = iterator.next();
+		const result = stream.result().catch((error: unknown) => error);
+		stream.end();
+		expect(await next).toEqual({ value: undefined, done: true });
+		expect(await isSettled(result)).toBe(true);
+		await expect(stream.result()).rejects.toThrow("Stream ended without a final result");
+	});
+
+	it("permits iteration alone when a producer ends without a result", async () => {
+		const stream = createStream();
+		stream.push({ value: 1 });
+		stream.end();
+		const values: number[] = [];
+		for await (const event of stream) values.push(event.value);
+		expect(values).toEqual([1]);
+	});
 	it("throw() releases pending reads and leaves other consumers active", async () => {
 		const stream = createStream();
 		const abandoned = stream[Symbol.asyncIterator]();

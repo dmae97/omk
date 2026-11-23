@@ -66,8 +66,8 @@ export class HybridStatusPanel<M = StatusPanelModel> implements Component {
 			const model = this.readModel(this.expanded, width);
 			height = this.surface.height(model, this.getRows());
 			const request = { kind: this.surface.kind, width, height, model };
-			const signature = JSON.stringify(request);
-			if (signature !== this.previous && !this.inFlight) {
+			const signature = this.inFlight ? undefined : JSON.stringify(request);
+			if (signature !== undefined && signature !== this.previous) {
 				this.start();
 				if (!this.failed && this.child?.connected) {
 					this.previous = signature;

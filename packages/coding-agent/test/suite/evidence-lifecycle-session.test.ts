@@ -2,7 +2,7 @@
  * Spec 106 D1 session sink: a goal-less session gets exactly one `evidence_lifecycle` custom entry per
  * settled prompt when OMK_EVIDENCE_LIFECYCLE=observe; flag off writes none. Never in model context.
  */
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { fauxAssistantMessage } from "omk-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,11 @@ import {
 	evidenceRegistryStats,
 	resetEvidenceLifecycleForTest,
 } from "../../src/core/evidence-lifecycle.ts";
+import {
+	evidenceHeldStats,
+	evidencePruneHold,
+	resetEvidenceDeleteForTest,
+} from "../../src/core/evidence-lifecycle-delete.ts";
 import { withEvidenceSession } from "../../src/core/evidence-lifecycle-scope.ts";
 import { EVIDENCE_LIFECYCLE_ENTRY_TYPE } from "../../src/core/evidence-lifecycle-session.ts";
 import type { SessionManager } from "../../src/core/session-manager.ts";
@@ -21,12 +26,16 @@ const SECRET = "SECRET-RAW-d1-session-91c2";
 const harnesses: Harness[] = [];
 const spills: string[] = [];
 
-beforeEach(() => resetEvidenceLifecycleForTest());
+beforeEach(() => {
+	resetEvidenceLifecycleForTest();
+	resetEvidenceDeleteForTest();
+});
 afterEach(() => {
 	while (harnesses.length > 0) harnesses.pop()?.cleanup();
 	for (const dir of spills.splice(0)) rmSync(dir, { recursive: true, force: true });
 	vi.unstubAllEnvs();
 	resetEvidenceLifecycleForTest();
+	resetEvidenceDeleteForTest();
 });
 
 function entries(sm: SessionManager) {
@@ -146,5 +155,35 @@ describe("spec 106 D1 session sink", () => {
 		b.session.dispose();
 		expect(evidenceRegistryStats(idB).registered).toBe(0);
 		expect(evidenceRegistrySessionCount()).toBe(0);
+	});
+
+	it("releases prune-hold metadata on close and dispose without deleting artifacts or clearing a live session", async () => {
+		vi.stubEnv("OMK_EVIDENCE_LIFECYCLE", "delete");
+		const a = await createHarness();
+		harnesses.push(a);
+		const b = await createHarness();
+		harnesses.push(b);
+		const idA = a.sessionManager.getSessionId();
+		const idB = b.sessionManager.getSessionId();
+		const pathA = spill(a);
+		const pathB = spill(b);
+		for (const [id, path] of [
+			[idA, pathA],
+			[idB, pathB],
+		]) {
+			expect(withEvidenceSession(id, () => evidencePruneHold(path))).toEqual(["awaiting-consumer"]);
+			expect(evidenceHeldStats(id).heldCount).toBe(1);
+		}
+
+		await a.session.close();
+		expect(evidenceRegistryStats(idA).registered).toBe(0);
+		expect(evidenceHeldStats(idA)).toEqual({ heldCount: 0, heldBytes: 0, heldReasons: {} });
+		expect(evidenceHeldStats(idB).heldCount).toBe(1);
+
+		b.session.dispose();
+		expect(evidenceRegistryStats(idB).registered).toBe(0);
+		expect(evidenceHeldStats(idB)).toEqual({ heldCount: 0, heldBytes: 0, heldReasons: {} });
+		expect(existsSync(pathA)).toBe(true);
+		expect(existsSync(pathB)).toBe(true);
 	});
 });

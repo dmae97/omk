@@ -281,7 +281,7 @@ npm test
 
 See [Development](https://github.com/dmae97/omk/blob/main/packages/coding-agent/docs/development.md) and [CONTRIBUTING.md](https://github.com/dmae97/omk/blob/main/CONTRIBUTING.md).
 
-Release notes: [v2.0.3](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v2.0.3.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
+Release notes: [v2.0.4](https://github.com/dmae97/omk/blob/main/.github/RELEASE_NOTES_v2.0.4.md). Public releases: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). Source-version notes can describe a candidate until its tag workflow completes.
 
 ## License
 

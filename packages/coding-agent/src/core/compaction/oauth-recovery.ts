@@ -18,6 +18,14 @@ export function isRejectedOAuthTokenMessage(text: string | undefined): boolean {
 	return text !== undefined && REJECTED_OAUTH_TOKEN_PATTERN.test(text);
 }
 
+export function formatOAuthRecoveryFailure(provider?: string): string {
+	const prefix = "Provider rejected the OAuth credential.";
+	if (provider && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(provider)) {
+		return `${prefix} OAuth refresh for ${provider} failed; run '/login ${provider}'.`;
+	}
+	return `${prefix} OAuth refresh failed; run '/login' and select the provider.`;
+}
+
 export interface OAuthRecoveryInput<T> {
 	/** The api key the failed request was sent with; `undefined` skips recovery. */
 	readonly apiKey: string | undefined;
@@ -45,12 +53,8 @@ export async function summarizeWithOAuthRecovery<T>(input: OAuthRecoveryInput<T>
 		let refreshed: string | undefined;
 		try {
 			refreshed = await input.refreshRejectedToken(input.apiKey);
-		} catch (refreshError) {
-			const provider = input.provider ?? "the provider";
-			throw new Error(
-				`${errorMessage(error)} (OAuth refresh for ${provider} failed: ${errorMessage(refreshError)}; run '/login ${provider}')`,
-				{ cause: error instanceof Error ? error : undefined },
-			);
+		} catch {
+			throw new Error(formatOAuthRecoveryFailure(input.provider));
 		}
 		if (refreshed === undefined) throw error;
 		return await input.run(refreshed);

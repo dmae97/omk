@@ -640,7 +640,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v2.0.3](.github/RELEASE_NOTES_v2.0.3.md)
+- [Release notes for v2.0.4](.github/RELEASE_NOTES_v2.0.4.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -713,6 +713,17 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v2.0.4
+
+### Fixed
+
+- Release in-memory evidence deletion holds when a session closes.
+- Report a provider stream that closes without a final result instead of leaving the turn pending.
+- Show a `/login` hint without leaking a failed OAuth refresh's raw error during a turn or compaction.
+- Avoid repeated transcript normalization in session search and redundant status panel serialization while a frame is in flight.
+
+Release notes live in [RELEASE_NOTES_v2.0.4.md](.github/RELEASE_NOTES_v2.0.4.md).
+
 ## Release v2.0.3
 
 ### Changed
@@ -751,20 +762,6 @@ Release notes live in [RELEASE_NOTES_v2.0.3.md](.github/RELEASE_NOTES_v2.0.3.md)
 - The standalone installer reads the downloaded binary's version with `OMK_PACKAGE_DIR` unset, so an `OMK_PACKAGE_DIR` in the environment that points at another installation no longer makes the check read that installation's version.
 
 Release notes live in [RELEASE_NOTES_v2.0.2.md](.github/RELEASE_NOTES_v2.0.2.md).
-
-## Release v2.0.1
-
-### Fixed
-
-- `omk init --global` and a bare `omk` launch now report why bundled pstack agent installation failed, including the affected path, instead of `(unknown)`. Existing files are still never replaced (#451).
-- An extension load failure for a module under another installation's `node_modules` tree no longer suggests `omk install --allow-scripts`, because install scripts cannot fix a stale path. A missing file in a package's own `build/`, `dist/` or `lib/` output and missing `.node` bindings still get the hint (#451).
-- Skill selection rejects fuzzy matches between words with different initial characters unless one contains the other, and no longer treats path-only fragments as independent capability clauses. Filename tokens still count toward whole-request relevance (#453).
-
-### Changed
-
-- Next-task suggestions (`OMK_NEXT_SUGGESTIONS`, flag, default off) use the v3 format: a title and three labelled lines for context, scope and completion criteria. Skill selection for an accepted suggestion uses its title and scope rather than the host's context and check wording (#454).
-
-Release notes live in [RELEASE_NOTES_v2.0.1.md](.github/RELEASE_NOTES_v2.0.1.md).
 
 <!-- releases:end -->
 

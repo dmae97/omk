@@ -92,6 +92,36 @@ it("preserves the native rail when model projection fails", async () => {
 });
 
 it.skipIf(Number(process.versions.node.split(".")[0]) < 26)(
+	"does not serialize footer models while the worker already has a frame in flight",
+	async () => {
+		let serializations = 0;
+		const model = { text: "#ede6d6", lines: [{ left: [{ text: "fixture" }], right: [] }] };
+		const panel = new HybridStatusPanel(
+			() => ({
+				...model,
+				toJSON() {
+					serializations++;
+					return model;
+				},
+			}),
+			{ render: () => ["native footer"], invalidate() {} },
+			() => 30,
+			() => {},
+			{ kind: "footer", height: (current) => current.lines.length },
+		);
+		try {
+			panel.render(72);
+			const initial = serializations;
+			expect(initial).toBeGreaterThan(0);
+			for (let i = 0; i < 200; i++) panel.render(72);
+			expect(serializations - initial).toBe(0);
+		} finally {
+			panel.dispose();
+			await panel.waitForClose();
+		}
+	},
+);
+it.skipIf(Number(process.versions.node.split(".")[0]) < 26)(
 	"swaps a footer surface to an OpenTUI frame sized by the model's rows",
 	async () => {
 		const repaint = vi.fn();

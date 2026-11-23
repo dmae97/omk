@@ -73,19 +73,39 @@ describe("summarizeWithOAuthRecovery", () => {
 		expect(runs).toBe(1);
 	});
 
-	it("names the provider login step when the forced refresh itself fails", async () => {
+	it("reports a safe login hint without retaining request or refresh errors", async () => {
+		const result = summarizeWithOAuthRecovery({
+			apiKey: "fixture-access-value",
+			provider: "openai-codex",
+			run: async () => {
+				throw new Error("401 token_expired: fixture-access-value");
+			},
+			refreshRejectedToken: async () => {
+				throw new Error("invalid_grant: fixture-refresh-value");
+			},
+		});
+		await expect(result).rejects.toMatchObject({
+			message:
+				"Provider rejected the OAuth credential. OAuth refresh for openai-codex failed; run '/login openai-codex'.",
+		});
+		await expect(result).rejects.not.toHaveProperty("cause");
+	});
+
+	it.each([undefined, "provider with spaces"])("uses a generic login hint for provider %s", async (provider) => {
 		await expect(
 			summarizeWithOAuthRecovery({
 				apiKey: "dead",
-				provider: "openai-codex",
+				provider,
 				run: async () => {
 					throw new Error(CODEX_401);
 				},
 				refreshRejectedToken: async () => {
-					throw new Error("refresh_token_reused");
+					throw new Error("invalid_grant");
 				},
 			}),
-		).rejects.toThrow(/token is expired.*refresh.*openai-codex.*refresh_token_reused.*\/login openai-codex/s);
+		).rejects.toMatchObject({
+			message: "Provider rejected the OAuth credential. OAuth refresh failed; run '/login' and select the provider.",
+		});
 	});
 
 	it("does not refresh for errors that are not a rejected token", async () => {

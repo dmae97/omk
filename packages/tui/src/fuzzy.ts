@@ -10,8 +10,12 @@ export interface FuzzyMatch {
 }
 
 export function fuzzyMatch(query: string, text: string): FuzzyMatch {
+	return fuzzyMatchLowercaseText(query, text.toLowerCase());
+}
+
+/** Match against text already lowercased for reuse across multiple queries. */
+export function fuzzyMatchLowercaseText(query: string, textLower: string): FuzzyMatch {
 	const queryLower = query.toLowerCase();
-	const textLower = text.toLowerCase();
 
 	const matchQuery = (normalizedQuery: string): FuzzyMatch => {
 		if (normalizedQuery.length === 0) {
