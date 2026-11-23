@@ -58,7 +58,7 @@ def check_pty(args, cwd, env):
         os.close(slave)
     transcript = bytearray()
 
-    def read_output(timeout):
+    def read_output(timeout, *, closing=False):
         if not select.select([master], [], [], timeout)[0]:
             return
         try:
@@ -67,6 +67,8 @@ def check_pty(args, cwd, env):
             if error.errno != errno.EIO:
                 raise
             data = b''
+        if not data and closing:
+            return False
         require(data or process.poll() is not None, 'PTY closed its output unexpectedly')
         transcript.extend(data)
 
@@ -95,7 +97,11 @@ def check_pty(args, cwd, env):
         os.write(master, b'\x1b')
         read_output(0.25)
         os.write(master, b'\x04')
-        require(process.wait(timeout=5) == 0, 'PTY exit failed')
+        deadline = time.monotonic() + 5
+        while process.poll() is None and time.monotonic() < deadline:
+            if read_output(min(0.1, max(0, deadline - time.monotonic())), closing=True) is False:
+                break
+        require(process.wait(timeout=max(0, deadline - time.monotonic())) == 0, 'PTY exit failed')
     finally:
         if process.poll() is None:
             process.kill()
