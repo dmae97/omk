@@ -3,6 +3,8 @@
 # Preserve the exact selection, including partially staged files.
 STAGED_TREE=$(git write-tree) || exit 1
 
+node scripts/check-scope-lease.mjs || exit 1
+
 node scripts/check-lockfile-commit.mjs
 if [ $? -ne 0 ]; then
   exit 1
