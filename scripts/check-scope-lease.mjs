@@ -98,7 +98,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 	const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
 	const leases = readLeases(join(common, "omk-leases"));
 	if (leases.length === 0) process.exit(0);
-	const staged = git(["diff", "--cached", "--name-only", "-z"]).split("\0").filter(Boolean);
+	// Report a rename as a deletion and an addition so both paths are checked.
+	const staged = git(["diff", "--cached", "--no-renames", "--name-only", "-z"]).split("\0").filter(Boolean);
 	const conflicts = findConflicts({
 		leases,
 		staged,

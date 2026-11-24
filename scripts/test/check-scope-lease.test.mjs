@@ -79,4 +79,38 @@ describe("pre-commit run in a real repository", () => {
 		write({ pid: process.pid });
 		assert.equal(run().status, 0);
 	});
+
+	it("checks both paths of a staged rename", () => {
+		git("config", "diff.renames", "true");
+		git("add", "web/a.ts", "b.ts");
+		git(
+			"-c",
+			"user.name=OMK Test",
+			"-c",
+			"user.email=omk-test@example.invalid",
+			"-c",
+			"commit.gpgSign=false",
+			"-c",
+			"core.hooksPath=.git/no-hooks",
+			"commit",
+			"-qm",
+			"baseline",
+		);
+		git("mv", "web/a.ts", "renamed file.ts");
+
+		const host = `${hostname()}-remote`;
+		const env = { OMK_LEASE_AS: "" };
+		write({ host, patterns: ["web/**"] });
+		const source = run(env);
+		assert.equal(source.status, 1, source.stderr);
+		assert.match(source.stderr, /web\/a\.ts: session aaaaaaaa/);
+
+		write({ host, patterns: ["renamed file.ts"] });
+		const destination = run(env);
+		assert.equal(destination.status, 1, destination.stderr);
+		assert.match(destination.stderr, /renamed file\.ts: session aaaaaaaa/);
+
+		write({ host, patterns: ["b.ts"] });
+		assert.equal(run(env).status, 0);
+	});
 });
