@@ -1,0 +1,1894 @@
+{
+  "schema": "omk.openai-completions-cross.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-cross-recorder.ts": "054446acfaaa98484170ed9494d720acdc0c668d6d0cc3ed621c57311ac307f0",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/hash.ts": "2cdfce4af41810d1a92c7f0a55c78637a3173041038aafd85b378be345761ed8",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "synthetic-none",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "synthetic",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-completions",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"start\",\"reasoning_content\":\"visible\\nopaque\",\"tool_calls\":[{\"id\":\"call+|it😀/1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call+|it😀/2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw|\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"|\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a|b|c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":\"synthetic\"},[],\"detail\"]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a|b|c\"},{\"role\":\"tool\",\"content\":\"result-6\",\"tool_call_id\":\"|\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw|\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call+|it😀/2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call+|it😀/1\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "synthetic-provider",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "synthetic",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "foreign",
+              "api": "openai-completions",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "synthetic-api",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "synthetic",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "synthetic-model",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "synthetic",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-completions",
+              "model": "other"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "openai-none",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "openai",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "openai",
+              "api": "openai-completions",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"start\",\"reasoning_content\":\"visible\\nopaque\",\"tool_calls\":[{\"id\":\"call+|it😀/1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call+|it😀/2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw|\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"|\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a|b|c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":\"synthetic\"},[],\"detail\"]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a|b|c\"},{\"role\":\"tool\",\"content\":\"result-6\",\"tool_call_id\":\"|\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw|\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call+|it😀/2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call+|it😀/1\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "openai-provider",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "openai",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "foreign",
+              "api": "openai-completions",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "openai-api",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "openai",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "openai",
+              "api": "openai-responses",
+              "model": "m"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "openai-model",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "provider": "openai",
+        "model": "m",
+        "system": "",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "openai",
+              "api": "openai-completions",
+              "model": "other"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "start"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "synthetic",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                },
+                "thoughtSignature": "{\"z\":1,\"a\":\"synthetic\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                },
+                "thoughtSignature": "false"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                },
+                "thoughtSignature": "invalid"
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                },
+                "thoughtSignature": "[]"
+              },
+              {
+                "type": "toolCall",
+                "id": "plainplainplainplainplainplainplainplainplainplain",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                },
+                "thoughtSignature": "null"
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                },
+                "thoughtSignature": "\"\""
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                },
+                "thoughtSignature": "0"
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                },
+                "thoughtSignature": "\"detail\""
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plainplainplainplainplainplainplainplainplainplain",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|A+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"startvisible\",\"tool_calls\":[{\"id\":\"call__it___1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"}},{\"id\":\"call__it___2\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"}},{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"}},{\"id\":\"plainplainplainplainplainplainplainplain\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"}},{\"id\":\"raw\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"}},{\"id\":\"\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"}},{\"id\":\"a_b_c\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"}}]},{\"role\":\"tool\",\"content\":\"result-7\",\"tool_call_id\":\"a_b_c\"},{\"role\":\"tool\",\"content\":\"result-5\",\"tool_call_id\":\"raw\"},{\"role\":\"tool\",\"content\":\"result-4\",\"tool_call_id\":\"plainplainplainplainplainplainplainplain\"},{\"role\":\"tool\",\"content\":\"result-3\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_dn63vi1u\"},{\"role\":\"tool\",\"content\":\"result-2\",\"tool_call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_gq7ppno7\"},{\"role\":\"tool\",\"content\":\"result-1\",\"tool_call_id\":\"call__it___2\"},{\"role\":\"tool\",\"content\":\"result-0\",\"tool_call_id\":\"call__it___1\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    }
+  ]
+}

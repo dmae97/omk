@@ -1,0 +1,518 @@
+{
+  "schema": "omk.openai-responses-headers.v1",
+  "source": {
+    "scripts/fixtures/openai-responses-headers-recorder.ts": "5a45ae024e17aa659b73bdc9baaaad6475ed098142f2695ee2998a194c769efa",
+    "packages/ai/src/providers/openai-responses.ts": "e24fd470213a6ef6c4c23c88bf1de8e32023048cb4c659836a75389e008cf5ff",
+    "node_modules/openai/internal/headers.js": "b4baaa26184fd91e7fd6b6f0215eb631a8c4c84b76c5eba3664e1c7e077011ae",
+    "node_modules/openai/client.js": "7ceed4b8b719d529d76f46c8c2860bd445ad0c76dd1c187598489292951be7e2",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "model-only",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "X-Model": "m",
+          "x-shared": "model"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-model": "m",
+          "x-shared": "model"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "options-only",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "headers": {
+          "X-Option": "o"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-option": "o"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "options-override-model",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "X-Shared": "model",
+          "x-keep": "k"
+        },
+        "headers": {
+          "X-Shared": "option"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-keep": "k",
+          "x-shared": "option"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "options-override-other-case",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "X-Shared": "model"
+        },
+        "headers": {
+          "x-shared": "option"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-shared": "option"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "case-collision-position",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "X-A": "1",
+          "x-a": "2"
+        },
+        "headers": {
+          "X-A": "3"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-a": "2"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "index-keys-first",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "2": "two",
+          "10": "ten",
+          "x-b": "b"
+        },
+        "headers": {
+          "02": "zero-two"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "2": "two",
+          "10": "ten",
+          "02": "zero-two",
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-b": "b"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "session-then-model",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "session_id": "model-session",
+          "x-client-request-id": "model-req"
+        },
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "sess-1",
+          "x-client-request-id": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-in-place-before-cased-key",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "session_id": "model-lower",
+          "SESSION_ID": "model-upper"
+        },
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "model-upper",
+          "x-client-request-id": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "options-override-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "headers": {
+          "session_id": "opt-session",
+          "X-Client-Request-Id": "opt-req"
+        },
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "opt-session",
+          "x-client-request-id": "opt-req"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-header-disabled-model-kept",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "compat": {
+          "sendSessionIdHeader": false
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "session_id": "model-session"
+        },
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "model-session",
+          "x-client-request-id": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "retention-none-model-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "session_id": "model-session"
+        },
+        "sessionId": "sess-1",
+        "cacheRetention": "none"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "model-session"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "override-sdk-defaults",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "headers": {
+          "Accept": "text/event-stream",
+          "Authorization": "Bearer synthetic-override"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "text/event-stream",
+          "authorization": "Bearer synthetic-override",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "content-type-is-sdk-owned",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "Content-Type": "text/plain"
+        },
+        "headers": {
+          "content-type": "application/x-ndjson"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "empty-and-inner-space",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {
+          "x-empty": "",
+          "x-inner": "a b\tc"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-empty": "",
+          "x-inner": "a b\tc"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "token-punctuation",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "headers": {
+          "X-!#$%&'*+-.^_`|~": "v",
+          "x-value": "A-z_0.9~!#$%&'*+^`|\"()/:;<=>?@[\\]{}"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-!#$%&'*+-.^_`|~": "v",
+          "x-value": "A-z_0.9~!#$%&'*+^`|\"()/:;<=>?@[\\]{}"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "empty-objects",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "modelHeaders": {},
+        "headers": {}
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    }
+  ]
+}

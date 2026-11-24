@@ -25,7 +25,7 @@ fn invalid_usage_is_an_error_not_a_panic_or_success() {
 }
 
 #[test]
-fn request_rejects_unknown_input_and_preserves_schema_order_and_string_spaces() {
+fn request_rejects_unknown_input_and_canonicalizes_schema_order_like_node() {
     let mut input =
         json!({"model":"synthetic-anthropic","maxTokens":1,"system":"","user":"hello", "tools":[]});
     input["apiKey"] = json!("synthetic-unused");
@@ -37,7 +37,8 @@ fn request_rejects_unknown_input_and_preserves_schema_order_and_string_spaces() 
     }"#).unwrap();
     let request = build_request(&input).unwrap();
     let body = request["body"].as_str().unwrap();
-    assert!(body.find("\"z\"").unwrap() < body.find("\"a\"").unwrap());
+    // Node stableToolSchema sorts keys; the old order-preservation expectation was not Node parity.
+    assert!(body.find("\"a\"").unwrap() < body.find("\"z\"").unwrap());
     let parsed: Value = serde_json::from_str(body).unwrap();
     assert_eq!(
         parsed["tools"][0]["input_schema"]["properties"]["z"]["description"],

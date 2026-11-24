@@ -1,0 +1,1266 @@
+{
+  "schema": "omk.anthropic-tool-schema.v1",
+  "locale": "en-US",
+  "source": {
+    "scripts/fixtures/anthropic-tool-schema-recorder.ts": "b836fab42934a2437c4261b3225f1a86b37206b2223174ca582a228679e50ffc",
+    "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
+    "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
+    "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
+    "node_modules/@anthropic-ai/sdk/package.json": "fcfaedec125d8cdfa6174f2ffae129f0ad34c681cad90a2a9dc9118cd9caecfa"
+  },
+  "cases": [
+    {
+      "id": "collation-chars",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"synthetic-tool-schema\",\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-tool-schema",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Use a tool",
+        "tools": [
+          {
+            "name": "z",
+            "description": "Synthetic z",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "y",
+            "description": "Synthetic y",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "x",
+            "description": "Synthetic x",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "w",
+            "description": "Synthetic w",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "v",
+            "description": "Synthetic v",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "u",
+            "description": "Synthetic u",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "t",
+            "description": "Synthetic t",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "s",
+            "description": "Synthetic s",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "r",
+            "description": "Synthetic r",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "q",
+            "description": "Synthetic q",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "p",
+            "description": "Synthetic p",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "o",
+            "description": "Synthetic o",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "n",
+            "description": "Synthetic n",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "m",
+            "description": "Synthetic m",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "l",
+            "description": "Synthetic l",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "k",
+            "description": "Synthetic k",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "j",
+            "description": "Synthetic j",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "i",
+            "description": "Synthetic i",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "h",
+            "description": "Synthetic h",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "g",
+            "description": "Synthetic g",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "f",
+            "description": "Synthetic f",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "e",
+            "description": "Synthetic e",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "d",
+            "description": "Synthetic d",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "c",
+            "description": "Synthetic c",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "b",
+            "description": "Synthetic b",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "a",
+            "description": "Synthetic a",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "8",
+            "description": "Synthetic 8",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "6",
+            "description": "Synthetic 6",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "4",
+            "description": "Synthetic 4",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "2",
+            "description": "Synthetic 2",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "0",
+            "description": "Synthetic 0",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "_",
+            "description": "Synthetic _",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "Z",
+            "description": "Synthetic Z",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "Y",
+            "description": "Synthetic Y",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "X",
+            "description": "Synthetic X",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "W",
+            "description": "Synthetic W",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "V",
+            "description": "Synthetic V",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "U",
+            "description": "Synthetic U",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "T",
+            "description": "Synthetic T",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "S",
+            "description": "Synthetic S",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "R",
+            "description": "Synthetic R",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "Q",
+            "description": "Synthetic Q",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "P",
+            "description": "Synthetic P",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "O",
+            "description": "Synthetic O",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "N",
+            "description": "Synthetic N",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "M",
+            "description": "Synthetic M",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "L",
+            "description": "Synthetic L",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "K",
+            "description": "Synthetic K",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "J",
+            "description": "Synthetic J",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "I",
+            "description": "Synthetic I",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "H",
+            "description": "Synthetic H",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "G",
+            "description": "Synthetic G",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "F",
+            "description": "Synthetic F",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "E",
+            "description": "Synthetic E",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "D",
+            "description": "Synthetic D",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "C",
+            "description": "Synthetic C",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "B",
+            "description": "Synthetic B",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "A",
+            "description": "Synthetic A",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "9",
+            "description": "Synthetic 9",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "7",
+            "description": "Synthetic 7",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "5",
+            "description": "Synthetic 5",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "3",
+            "description": "Synthetic 3",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "1",
+            "description": "Synthetic 1",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "-",
+            "description": "Synthetic -",
+            "properties": {},
+            "required": []
+          }
+        ]
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-tool-schema\",\"messages\":[{\"role\":\"user\",\"content\":\"Use a tool\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"_\",\"description\":\"Synthetic _\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"-\",\"description\":\"Synthetic -\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"0\",\"description\":\"Synthetic 0\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"1\",\"description\":\"Synthetic 1\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"2\",\"description\":\"Synthetic 2\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"3\",\"description\":\"Synthetic 3\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"4\",\"description\":\"Synthetic 4\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"5\",\"description\":\"Synthetic 5\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"6\",\"description\":\"Synthetic 6\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"7\",\"description\":\"Synthetic 7\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"8\",\"description\":\"Synthetic 8\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"9\",\"description\":\"Synthetic 9\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"a\",\"description\":\"Synthetic a\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"A\",\"description\":\"Synthetic A\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"b\",\"description\":\"Synthetic b\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"B\",\"description\":\"Synthetic B\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"c\",\"description\":\"Synthetic c\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"C\",\"description\":\"Synthetic C\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"d\",\"description\":\"Synthetic d\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"D\",\"description\":\"Synthetic D\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"e\",\"description\":\"Synthetic e\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"E\",\"description\":\"Synthetic E\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"f\",\"description\":\"Synthetic f\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"F\",\"description\":\"Synthetic F\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"g\",\"description\":\"Synthetic g\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"G\",\"description\":\"Synthetic G\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"h\",\"description\":\"Synthetic h\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"H\",\"description\":\"Synthetic H\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"i\",\"description\":\"Synthetic i\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"I\",\"description\":\"Synthetic I\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"j\",\"description\":\"Synthetic j\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"J\",\"description\":\"Synthetic J\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"k\",\"description\":\"Synthetic k\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"K\",\"description\":\"Synthetic K\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"l\",\"description\":\"Synthetic l\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"L\",\"description\":\"Synthetic L\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"m\",\"description\":\"Synthetic m\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"M\",\"description\":\"Synthetic M\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"n\",\"description\":\"Synthetic n\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"N\",\"description\":\"Synthetic N\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"o\",\"description\":\"Synthetic o\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"O\",\"description\":\"Synthetic O\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"p\",\"description\":\"Synthetic p\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"P\",\"description\":\"Synthetic P\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"q\",\"description\":\"Synthetic q\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"Q\",\"description\":\"Synthetic Q\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"r\",\"description\":\"Synthetic r\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"R\",\"description\":\"Synthetic R\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"s\",\"description\":\"Synthetic s\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"S\",\"description\":\"Synthetic S\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"t\",\"description\":\"Synthetic t\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"T\",\"description\":\"Synthetic T\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"u\",\"description\":\"Synthetic u\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"U\",\"description\":\"Synthetic U\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"v\",\"description\":\"Synthetic v\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"V\",\"description\":\"Synthetic V\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"w\",\"description\":\"Synthetic w\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"W\",\"description\":\"Synthetic W\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"x\",\"description\":\"Synthetic x\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"X\",\"description\":\"Synthetic X\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"y\",\"description\":\"Synthetic y\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"Y\",\"description\":\"Synthetic Y\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"z\",\"description\":\"Synthetic z\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"Z\",\"description\":\"Synthetic Z\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-tool-schema",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "collation-names",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"synthetic-tool-schema\",\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-tool-schema",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Use a tool",
+        "tools": [
+          {
+            "name": "readFile",
+            "description": "Synthetic readFile",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "read_file",
+            "description": "Synthetic read_file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Read",
+            "description": "Synthetic Read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "read-file",
+            "description": "Synthetic read-file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "read10",
+            "description": "Synthetic read10",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "read2",
+            "description": "Synthetic read2",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "readfile",
+            "description": "Synthetic readfile",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "a",
+            "description": "Synthetic a",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "A",
+            "description": "Synthetic A",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "a_b",
+            "description": "Synthetic a_b",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "a-b",
+            "description": "Synthetic a-b",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "a1",
+            "description": "Synthetic a1",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "ab",
+            "description": "Synthetic ab",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "aB",
+            "description": "Synthetic aB",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Ab",
+            "description": "Synthetic Ab",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "AB",
+            "description": "Synthetic AB",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "b",
+            "description": "Synthetic b",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "_x",
+            "description": "Synthetic _x",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "-x",
+            "description": "Synthetic -x",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "9z",
+            "description": "Synthetic 9z",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Z",
+            "description": "Synthetic Z",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Read_",
+            "description": "Synthetic Read_",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "READ",
+            "description": "Synthetic READ",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ]
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-tool-schema\",\"messages\":[{\"role\":\"user\",\"content\":\"Use a tool\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"_x\",\"description\":\"Synthetic _x\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"-x\",\"description\":\"Synthetic -x\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"9z\",\"description\":\"Synthetic 9z\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"a\",\"description\":\"Synthetic a\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"A\",\"description\":\"Synthetic A\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"a_b\",\"description\":\"Synthetic a_b\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"a-b\",\"description\":\"Synthetic a-b\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"a1\",\"description\":\"Synthetic a1\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"ab\",\"description\":\"Synthetic ab\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"aB\",\"description\":\"Synthetic aB\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"Ab\",\"description\":\"Synthetic Ab\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"AB\",\"description\":\"Synthetic AB\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"b\",\"description\":\"Synthetic b\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"read\",\"description\":\"Synthetic read\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"Read\",\"description\":\"Synthetic Read\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"READ\",\"description\":\"Synthetic READ\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"Read_\",\"description\":\"Synthetic Read_\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"read_file\",\"description\":\"Synthetic read_file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"read-file\",\"description\":\"Synthetic read-file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"read10\",\"description\":\"Synthetic read10\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"read2\",\"description\":\"Synthetic read2\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"readfile\",\"description\":\"Synthetic readfile\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"readFile\",\"description\":\"Synthetic readFile\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}},{\"name\":\"Z\",\"description\":\"Synthetic Z\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-tool-schema",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "schema-canonical",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"synthetic-tool-schema\",\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-tool-schema",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Use a tool",
+        "tools": [
+          {
+            "name": "schema",
+            "description": "Synthetic schema",
+            "properties": {
+              "9": {
+                "type": "string"
+              },
+              "10": {
+                "type": "string"
+              },
+              "4294967294": {
+                "type": "string"
+              },
+              "zeta": {
+                "type": "object",
+                "required": null,
+                "properties": {
+                  "b": {
+                    "type": "integer",
+                    "maximum": 1e+21
+                  },
+                  "a": {
+                    "type": "number",
+                    "minimum": 1e-7,
+                    "multipleOf": 0.000001
+                  }
+                }
+              },
+              "01": {
+                "type": "string"
+              },
+              "4294967295": {
+                "type": "string"
+              },
+              "Alpha": {
+                "type": "array",
+                "items": [
+                  {
+                    "required": null,
+                    "y": 2.5e-8,
+                    "x": 1e+300
+                  },
+                  null,
+                  true,
+                  "\u0001\u001f /\"\\"
+                ],
+                "required": [
+                  "y",
+                  "x"
+                ]
+              },
+              "é": {
+                "enum": [
+                  9007199254740992,
+                  0.5,
+                  -3
+                ]
+              },
+              "😀": {
+                "const": "emoji"
+              },
+              "�": {
+                "const": "replacement"
+              },
+              "": {
+                "const": "empty"
+              },
+              "__proto__": {
+                "const": "own"
+              },
+              "required": null,
+              "kept": null
+            },
+            "required": [
+              "zeta",
+              "Alpha"
+            ]
+          }
+        ]
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-tool-schema\",\"messages\":[{\"role\":\"user\",\"content\":\"Use a tool\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"schema\",\"description\":\"Synthetic schema\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"9\":{\"type\":\"string\"},\"10\":{\"type\":\"string\"},\"4294967294\":{\"type\":\"string\"},\"\":{\"const\":\"empty\"},\"01\":{\"type\":\"string\"},\"4294967295\":{\"type\":\"string\"},\"Alpha\":{\"items\":[{\"x\":1e+300,\"y\":2.5e-8},null,true,\"\\u0001\\u001f /\\\"\\\\\"],\"required\":[\"y\",\"x\"],\"type\":\"array\"},\"__proto__\":{\"const\":\"own\"},\"kept\":null,\"zeta\":{\"properties\":{\"a\":{\"minimum\":1e-7,\"multipleOf\":0.000001,\"type\":\"number\"},\"b\":{\"maximum\":1e+21,\"type\":\"integer\"}},\"type\":\"object\"},\"é\":{\"enum\":[9007199254740992,0.5,-3]},\"😀\":{\"const\":\"emoji\"},\"�\":{\"const\":\"replacement\"}},\"required\":[\"zeta\",\"Alpha\"]}}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-tool-schema",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "properties-coerced",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"synthetic-tool-schema\",\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-tool-schema",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Use a tool",
+        "tools": [
+          {
+            "name": "p_string",
+            "description": "Synthetic p_string",
+            "properties": "x",
+            "required": []
+          },
+          {
+            "name": "p_array",
+            "description": "Synthetic p_array",
+            "properties": [],
+            "required": []
+          },
+          {
+            "name": "p_null",
+            "description": "Synthetic p_null",
+            "properties": null,
+            "required": []
+          }
+        ]
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-tool-schema\",\"messages\":[{\"role\":\"user\",\"content\":\"Use a tool\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"p_array\",\"description\":\"Synthetic p_array\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"p_null\",\"description\":\"Synthetic p_null\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"p_string\",\"description\":\"Synthetic p_string\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-tool-schema",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "cache-last-sorted",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"synthetic-tool-schema\",\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-tool-schema",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Use a tool",
+        "tools": [
+          {
+            "name": "write",
+            "description": "Synthetic write",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": []
+          },
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": []
+          }
+        ],
+        "options": {
+          "cacheRetention": "short"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-tool-schema\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Use a tool\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[{\"name\":\"read\",\"description\":\"Synthetic read\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}},{\"name\":\"write\",\"description\":\"Synthetic write\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]},\"cache_control\":{\"type\":\"ephemeral\"}}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-tool-schema",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    }
+  ],
+  "schemas": [
+    {
+      "text": "{\"v\":1.0}",
+      "properties": "{\"v\":1}"
+    },
+    {
+      "text": "{\"v\":1E2}",
+      "properties": "{\"v\":100}"
+    },
+    {
+      "text": "{\"v\":-0}",
+      "properties": "{\"v\":0}"
+    },
+    {
+      "text": "{\"v\":1e400}",
+      "properties": "{\"v\":null}"
+    },
+    {
+      "text": "{\"v\":-1e400}",
+      "properties": "{\"v\":null}"
+    },
+    {
+      "text": "{\"v\":1e-400}",
+      "properties": "{\"v\":0}"
+    },
+    {
+      "text": "{\"v\":5e-324}",
+      "properties": "{\"v\":5e-324}"
+    },
+    {
+      "text": "{\"v\":1.7976931348623157e308}",
+      "properties": "{\"v\":1.7976931348623157e+308}"
+    },
+    {
+      "text": "{\"v\":123456789012345678901234567890}",
+      "properties": "{\"v\":1.2345678901234568e+29}"
+    },
+    {
+      "text": "{\"v\":0.1}",
+      "properties": "{\"v\":0.1}"
+    },
+    {
+      "text": "{\"v\":0.30000000000000004}",
+      "properties": "{\"v\":0.30000000000000004}"
+    },
+    {
+      "text": "{\"v\":1e21}",
+      "properties": "{\"v\":1e+21}"
+    },
+    {
+      "text": "{\"v\":1e-7}",
+      "properties": "{\"v\":1e-7}"
+    },
+    {
+      "text": "{\"v\":0.000001}",
+      "properties": "{\"v\":0.000001}"
+    },
+    {
+      "text": "{\"v\":1.5e300}",
+      "properties": "{\"v\":1.5e+300}"
+    },
+    {
+      "text": "{\"v\":9007199254740993}",
+      "properties": "{\"v\":9007199254740992}"
+    },
+    {
+      "text": "{\"v\":\"\\u0001\\u001f\\u007f\\u2028/\\\"\\\\\"}",
+      "properties": "{\"v\":\"\\u0001\\u001f /\\\"\\\\\"}"
+    },
+    {
+      "text": "{\"v\":\"\\ud800\"}",
+      "properties": "{\"v\":\"\\ud800\"}"
+    },
+    {
+      "text": "{\"v\":[1,\"x\",true,false,null]}",
+      "properties": "{\"v\":[1,\"x\",true,false,null]}"
+    },
+    {
+      "text": "{ \"b\" : 1 , \"a\" : { \"d\" : null , \"required\" : null , \"c\" : [ { \"required\" : null , \"z\" : 1 , \"y\" : 2 } ] } }",
+      "properties": "{\"a\":{\"c\":[{\"y\":2,\"z\":1}],\"d\":null},\"b\":1}"
+    },
+    {
+      "text": "{\"a\":1,\"a\":2}",
+      "properties": "{\"a\":2}"
+    },
+    {
+      "text": "[]",
+      "properties": "{}"
+    },
+    {
+      "text": "null",
+      "properties": "{}"
+    },
+    {
+      "text": "5",
+      "properties": "{}"
+    },
+    {
+      "text": "{\"zeta\":{\"type\":\"object\",\"required\":null,\"properties\":{\"b\":{\"type\":\"integer\",\"maximum\":1e21},\"a\":{\"type\":\"number\",\"minimum\":1e-7,\"multipleOf\":0.000001}}},\"10\":{\"type\":\"string\"},\"9\":{\"type\":\"string\"},\"01\":{\"type\":\"string\"},\"4294967295\":{\"type\":\"string\"},\"4294967294\":{\"type\":\"string\"},\"Alpha\":{\"type\":\"array\",\"items\":[{\"required\":null,\"y\":2.5e-8,\"x\":1e300},null,true,\"\\u0001\\u001f\\u007f\\u2028/\\\"\\\\\"],\"required\":[\"y\",\"x\"]},\"é\":{\"enum\":[9007199254740992,0.5,-3]},\"😀\":{\"const\":\"emoji\"},\"\\uFFFD\":{\"const\":\"replacement\"},\"\":{\"const\":\"empty\"},\"__proto__\":{\"const\":\"own\"},\"required\":null,\"kept\":null}",
+      "properties": "{\"9\":{\"type\":\"string\"},\"10\":{\"type\":\"string\"},\"4294967294\":{\"type\":\"string\"},\"\":{\"const\":\"empty\"},\"01\":{\"type\":\"string\"},\"4294967295\":{\"type\":\"string\"},\"Alpha\":{\"items\":[{\"x\":1e+300,\"y\":2.5e-8},null,true,\"\\u0001\\u001f /\\\"\\\\\"],\"required\":[\"y\",\"x\"],\"type\":\"array\"},\"__proto__\":{\"const\":\"own\"},\"kept\":null,\"zeta\":{\"properties\":{\"a\":{\"minimum\":1e-7,\"multipleOf\":0.000001,\"type\":\"number\"},\"b\":{\"maximum\":1e+21,\"type\":\"integer\"}},\"type\":\"object\"},\"é\":{\"enum\":[9007199254740992,0.5,-3]},\"😀\":{\"const\":\"emoji\"},\"�\":{\"const\":\"replacement\"}}"
+    }
+  ]
+}

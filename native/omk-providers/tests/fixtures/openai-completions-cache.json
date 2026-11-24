@@ -1,0 +1,1403 @@
+{
+  "schema": "omk.openai-completions-cache.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-cache-recorder.ts": "52dfa6c0024aa81762544ca884b433dbf2e772ce4f2602349732b32b1132f76d",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-prompt-cache.ts": "dc5ad893e8d895e5eb7b76102c9c0f045569c839ed8d7679b72d24965dbfaf8f",
+    "packages/ai/src/providers/prompt-cache.ts": "d91900005c5a146e33b3276d02100a0da3dfe57f718301fc77c12cad23e8329d",
+    "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
+    "packages/ai/src/utils/hash.ts": "2cdfce4af41810d1a92c7f0a55c78637a3173041038aafd85b378be345761ed8",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "short-synthetic-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "none-openai-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "none",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-openai-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "default-openai-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "sess-default"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"sess-default\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-openai-no-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-openai-empty-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": ""
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-openai-long-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-openai-astral-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀😀"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "substring-host-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com.synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://api.openai.com.synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"s\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "long-supported-synthetic",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"s\",\"prompt_cache_retention\":\"24h\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "long-supported-no-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_retention\":\"24h\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "long-unsupported-synthetic",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "long-unsupported-openai",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"s\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "long-supported-openai",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"s\",\"prompt_cache_retention\":\"24h\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "none-supported-flag",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "none",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "short-supported-flag-synthetic",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "content-key",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-wjaeobn4rfr1\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}]}"
+      }
+    },
+    {
+      "id": "content-key-no-tools",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-lklfor1gdzfba\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "content-key-full-length",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 19
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-1f53t7c18wzqo2\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "content-key-beats-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 4
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-2efhf41qjr5q2\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "content-key-canonical-tools",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Edit",
+            "description": "Edit",
+            "required": [
+              "b",
+              "10"
+            ],
+            "properties": {
+              "2": {},
+              "10": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "b": {
+                "type": "object",
+                "required": null,
+                "properties": {
+                  "z": {},
+                  "y": {
+                    "enum": [
+                      1,
+                      0,
+                      1e+21,
+                      0.1
+                    ]
+                  }
+                }
+              },
+              "a": {
+                "type": "string"
+              },
+              "é": {},
+              "😀": {},
+              "": {}
+            }
+          }
+        ],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-1ce0fx9ch41a3\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"Edit\",\"description\":\"Edit\",\"parameters\":{\"properties\":{\"2\":{},\"10\":{\"minimum\":0,\"type\":\"integer\"},\"a\":{\"type\":\"string\"},\"b\":{\"properties\":{\"y\":{\"enum\":[1,0,1e+21,0.1]},\"z\":{}},\"type\":\"object\"},\"é\":{},\"😀\":{},\"\":{}},\"required\":[\"b\",\"10\"],\"type\":\"object\"},\"strict\":false}},{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}]}"
+      }
+    },
+    {
+      "id": "content-key-scope",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "gpt-synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-synthetic\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-g320lz7v5p8z\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "content-key-long",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-wjaeobn4rfr1\",\"prompt_cache_retention\":\"24h\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}]}"
+      }
+    },
+    {
+      "id": "content-key-astral-prefix",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "😀 cache 한글 tail",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "systemPromptCacheBoundary": 2
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"😀 cache 한글 tail\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"omk-1p8rsne1ct18kf\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-zero",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 0
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-negative",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": -1
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-too-long",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 20
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-fraction",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 1.5
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": null
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-string",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": "3"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "bypass-with-boundary",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 9,
+        "systemPromptCacheBoundaryBypass": true
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "bypass-without-boundary",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundaryBypass": true
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "bypass-false",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundaryBypass": false
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"s\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "empty-system-boundary",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 1
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "boundary-without-key-policy",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    }
+  ]
+}

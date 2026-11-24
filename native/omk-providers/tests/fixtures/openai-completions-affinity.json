@@ -1,0 +1,477 @@
+{
+  "schema": "omk.openai-completions-affinity.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-affinity-recorder.ts": "449bd6868ba09962b3aaa63514446cab5ecac4e4f07392be517977e127692665",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/openai-prompt-cache.ts": "dc5ad893e8d895e5eb7b76102c9c0f045569c839ed8d7679b72d24965dbfaf8f",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "affinity-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "sess-1",
+          "x-client-request-id": "sess-1",
+          "x-session-affinity": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-no-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-empty-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": ""
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-retention-none",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "none",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-retention-short",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "short",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "sess-1",
+          "x-client-request-id": "sess-1",
+          "x-session-affinity": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-retention-long",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true,
+          "supportsLongCacheRetention": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "long",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "sess-1",
+          "x-client-request-id": "sess-1",
+          "x-session-affinity": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"prompt_cache_retention\":\"24h\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-false-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": false
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-absent-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-openai-long-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "x-client-request-id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "x-session-affinity": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"prompt_cache_key\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-openai-none",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "cacheRetention": "none",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-internal-space",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "a b\tc"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "a b\tc",
+          "x-client-request-id": "a b\tc",
+          "x-session-affinity": "a b\tc"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "affinity-visible-ascii",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "sendSessionAffinityHeaders": true
+        },
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "sessionId": "A-z_0.9~!#$%&'*+^`|"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "A-z_0.9~!#$%&'*+^`|",
+          "x-client-request-id": "A-z_0.9~!#$%&'*+^`|",
+          "x-session-affinity": "A-z_0.9~!#$%&'*+^`|"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    }
+  ]
+}

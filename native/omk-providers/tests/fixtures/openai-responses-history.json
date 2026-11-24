@@ -1,0 +1,3919 @@
+{
+  "schema": "omk.openai-responses-history.v1",
+  "source": {
+    "scripts/fixtures/openai-responses-history-recorder.ts": "76444fafbb5d997254a04ac67fd0f81c9a66e9621c25f449ccdf3a6ed4f2a597",
+    "packages/ai/src/providers/openai-responses.ts": "e24fd470213a6ef6c4c23c88bf1de8e32023048cb4c659836a75389e008cf5ff",
+    "packages/ai/src/providers/openai-responses-shared.ts": "2b4b75585ee88793845e00260e4fd177be5e9ac4f5dec53521e7bc6ae6948311",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/hash.ts": "2cdfce4af41810d1a92c7f0a55c78637a3173041038aafd85b378be345761ed8",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "same-tool-turn",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hi"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Calling",
+                "textSignature": "{\"v\":1,\"id\":\"msg_1\"}"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1|fc_1",
+                "name": "f",
+                "arguments": {
+                  "10": "x",
+                  "z": 1,
+                  "a": {
+                    "2": true,
+                    "b": [
+                      1.5,
+                      0,
+                      1e+21
+                    ]
+                  },
+                  "é": null
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1|fc_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "out"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Done"
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hi\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Calling\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_1\"},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"call_1\",\"name\":\"f\",\"arguments\":\"{\\\"10\\\":\\\"x\\\",\\\"z\\\":1,\\\"a\\\":{\\\"2\\\":true,\\\"b\\\":[1.5,0,1e+21]},\\\"é\\\":null}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_1\",\"output\":\"out\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Done\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_3\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "same-reasoning",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hi"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_1\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"s\"}],\"encrypted_content\":\"enc\",\"10\":1.50,\"2\":-0}"
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t ",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_blank\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "unsigned"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_redacted\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": "empty-sig",
+                "thinkingSignature": ""
+              },
+              {
+                "type": "text",
+                "text": "answer",
+                "textSignature": "{\"v\":1,\"id\":\"msg_2\",\"phase\":\"final_answer\"}"
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hi\"}]},{\"2\":0,\"10\":1.5,\"type\":\"reasoning\",\"id\":\"rs_1\",\"summary\":[{\"type\":\"summary_text\",\"text\":\"s\"}],\"encrypted_content\":\"enc\"},{\"type\":\"reasoning\",\"id\":\"rs_redacted\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"answer\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_2\",\"phase\":\"final_answer\"}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"none\"}}"
+      }
+    },
+    {
+      "id": "text-signatures",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hi"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "a",
+                "textSignature": "{\"v\":1,\"id\":\"msg_c\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "text",
+                "text": "b",
+                "textSignature": "{\"v\":1,\"id\":\"msg_bad_phase\",\"phase\":\"other\"}"
+              },
+              {
+                "type": "text",
+                "text": "c",
+                "textSignature": "{\"v\":1,\"id\":\"\"}"
+              },
+              {
+                "type": "text",
+                "text": "d",
+                "textSignature": "legacy_plain_id"
+              },
+              {
+                "type": "text",
+                "text": "e",
+                "textSignature": "{\"v\":1,\"id\":\"mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm\"}"
+              },
+              {
+                "type": "text",
+                "text": "f",
+                "textSignature": "{\"v\":1,\"id\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"}"
+              },
+              {
+                "type": "text",
+                "text": "g",
+                "textSignature": "{\"v\":1,\"id\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"}"
+              },
+              {
+                "type": "text",
+                "text": "h",
+                "textSignature": "{\"v\":2,\"id\":\"x\"}"
+              },
+              {
+                "type": "text",
+                "text": "i",
+                "textSignature": "{\"v\":1,\"id\":7}"
+              },
+              {
+                "type": "text",
+                "text": "j",
+                "textSignature": "{\"v\":1.0,\"id\":\"one-point-zero\"}"
+              },
+              {
+                "type": "text",
+                "text": "k",
+                "textSignature": "{\"v\":1,\"id\":\"dup\",\"id\":\"last\"}"
+              },
+              {
+                "type": "text",
+                "text": "l"
+              },
+              {
+                "type": "text",
+                "text": "m",
+                "textSignature": ""
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hi\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"a\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_c\",\"phase\":\"commentary\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"b\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_bad_phase\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"c\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_2\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"d\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"legacy_plain_id\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"e\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_4tg0y8defk0h\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"f\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_smzk6g1t3negr\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"g\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"h\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"{\\\"v\\\":2,\\\"id\\\":\\\"x\\\"}\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"i\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"{\\\"v\\\":1,\\\"id\\\":7}\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"j\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"one-point-zero\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"k\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"last\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"l\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_11\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"m\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_12\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "message-index",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": "x"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "  "
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "third"
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"x\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"first\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"second\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"third\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_3\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "pairing",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "dead|fc_dead",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "stopReason": "error",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "dead|fc_dead",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "dropped"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "gone|fc_gone",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "stopReason": "aborted",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a|fc_a",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "b|fc_b",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|fc_empty",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "stopReason": "toolUse",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": " a|fc_a\n",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "padded"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "unknown|fc_u",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "orphan"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "blank"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "user",
+            "content": "interrupt"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "tail|fc_tail",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"function_call\",\"id\":\"fc_a\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"fc_b\",\"call_id\":\"b\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"fc_empty\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"padded\"},{\"type\":\"function_call_output\",\"call_id\":\"b\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"No result provided\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"interrupt\"}]},{\"type\":\"function_call\",\"id\":\"fc_tail\",\"call_id\":\"tail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call_output\",\"call_id\":\"tail\",\"output\":\"No result provided\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "tool-results",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "r1|fc_1",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "r2|fc_2",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "r3|fc_3",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "r4|fc_4",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "r1|fc_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "line1"
+              },
+              {
+                "type": "text",
+                "text": "line2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "r2|fc_2",
+            "toolName": "f",
+            "content": [],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "r3|fc_3",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "r4|fc_4",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "😀 \"q\""
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"r1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"fc_2\",\"call_id\":\"r2\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"fc_3\",\"call_id\":\"r3\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"fc_4\",\"call_id\":\"r4\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call_output\",\"call_id\":\"r1\",\"output\":\"line1\\nline2\"},{\"type\":\"function_call_output\",\"call_id\":\"r2\",\"output\":\"(see attached image)\"},{\"type\":\"function_call_output\",\"call_id\":\"r3\",\"output\":\"(see attached image)\"},{\"type\":\"function_call_output\",\"call_id\":\"r4\",\"output\":\"😀 \\\"q\\\"\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "same-call-ids",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "plain",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "we+ird|it/😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 2
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"function_call\",\"call_id\":\"plain\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"b\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"rs_1\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call\",\"id\":\"it/😀\",\"call_id\":\"we+ird\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":2}\"},{\"type\":\"function_call_output\",\"call_id\":\"plain\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"No result provided\"},{\"type\":\"function_call_output\",\"call_id\":\"we+ird\",\"output\":\"No result provided\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-synthetic-none",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_src\",\"phase\":\"commentary\"},{\"type\":\"reasoning\",\"id\":\"rs_src\"},{\"type\":\"reasoning\",\"id\":\"rs_red\"},{\"type\":\"function_call\",\"id\":\"it😀/1\",\"call_id\":\"call+\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"B+/=😀\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"b\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_x\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"rs_1\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"item___\",\"call_id\":\"trail___\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail___\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call+\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-synthetic-provider",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "foreign",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"call_id\":\"call__it___1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"a_b_c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_fc_x\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_rs_1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"trail____item\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail____item\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c_rs_1\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c_fc_x\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a_b_c\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call__it___1\",\"output\":\"result-0\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"No result provided\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-synthetic-api",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-completions",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"call_id\":\"call__it___1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"a_b_c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_fc_x\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_rs_1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"trail____item\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail____item\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c_rs_1\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c_fc_x\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a_b_c\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call__it___1\",\"output\":\"result-0\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"No result provided\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-synthetic-model",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "other"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"call_id\":\"call__it___1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"a_b_c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_fc_x\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c_rs_1\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"trail____item\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail____item\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c_rs_1\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c_fc_x\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a_b_c\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call__it___1\",\"output\":\"result-0\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"No result provided\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-openai-none",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "openai",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_src\",\"phase\":\"commentary\"},{\"type\":\"reasoning\",\"id\":\"rs_src\"},{\"type\":\"reasoning\",\"id\":\"rs_red\"},{\"type\":\"function_call\",\"id\":\"it😀/1\",\"call_id\":\"call+\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"B+/=😀\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"b\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_x\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"rs_1\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"item___\",\"call_id\":\"trail___\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail___\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call+\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-openai-provider",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "foreign",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"id\":\"fc_wy1znd1aew64y\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qmme311exb3ps\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_jbf49n1hx4dkv\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_1e8ugf8zrbf9\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_6uzfcw3e7c4\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qo12jt1t99y8s\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-openai-api",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "openai",
+              "api": "openai-completions",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"id\":\"fc_wy1znd1aew64y\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qmme311exb3ps\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_jbf49n1hx4dkv\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_1e8ugf8zrbf9\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_6uzfcw3e7c4\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qo12jt1t99y8s\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-openai-model",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "openai",
+              "api": "openai-responses",
+              "model": "other"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-opencode-none",
+      "input": {
+        "provider": "opencode",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "opencode",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_src\",\"phase\":\"commentary\"},{\"type\":\"reasoning\",\"id\":\"rs_src\"},{\"type\":\"reasoning\",\"id\":\"rs_red\"},{\"type\":\"function_call\",\"id\":\"it😀/1\",\"call_id\":\"call+\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"B+/=😀\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"b\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_x\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"rs_1\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"item___\",\"call_id\":\"trail___\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail___\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call+\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-opencode-provider",
+      "input": {
+        "provider": "opencode",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "foreign",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"id\":\"fc_wy1znd1aew64y\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qmme311exb3ps\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_jbf49n1hx4dkv\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_1e8ugf8zrbf9\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_6uzfcw3e7c4\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qo12jt1t99y8s\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-opencode-api",
+      "input": {
+        "provider": "opencode",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "opencode",
+              "api": "openai-completions",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"id\":\"fc_wy1znd1aew64y\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qmme311exb3ps\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_k4n83c7h0j2b\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_jbf49n1hx4dkv\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_1e8ugf8zrbf9\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_6uzfcw3e7c4\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc_qo12jt1t99y8s\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "cross-opencode-model",
+      "input": {
+        "provider": "opencode",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "start",
+                "textSignature": "{\"v\":1,\"id\":\"msg_src\",\"phase\":\"commentary\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "visible",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_src\"}"
+              },
+              {
+                "type": "thinking",
+                "thinking": "opaque",
+                "thinkingSignature": "{\"type\":\"reasoning\",\"id\":\"rs_red\"}",
+                "redacted": true
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "toolCall",
+                "id": "call+|it😀/1",
+                "name": "f",
+                "arguments": {
+                  "z": 0,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+                "name": "f",
+                "arguments": {
+                  "z": 1,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "plain-id",
+                "name": "f",
+                "arguments": {
+                  "z": 2,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "raw|",
+                "name": "f",
+                "arguments": {
+                  "z": 3,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "|",
+                "name": "f",
+                "arguments": {
+                  "z": 4,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "a|b|c",
+                "name": "f",
+                "arguments": {
+                  "z": 5,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|fc_x",
+                "name": "f",
+                "arguments": {
+                  "z": 6,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "c|rs_1",
+                "name": "f",
+                "arguments": {
+                  "z": 7,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "trail___|item___",
+                "name": "f",
+                "arguments": {
+                  "z": 8,
+                  "a": 1
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "name": "f",
+                "arguments": {
+                  "z": 9,
+                  "a": 1
+                }
+              }
+            ],
+            "source": {
+              "provider": "opencode",
+              "api": "openai-responses",
+              "model": "other"
+            },
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-9"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "trail___|item___",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-8"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|rs_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-7"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c|fc_x",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-6"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a|b|c",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-5"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-4"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "raw|",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-3"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "plain-id",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-2"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|B+/=😀",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-1"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call+|it😀/1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "result-0"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"start\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"visible\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_1_1\"},{\"type\":\"function_call\",\"call_id\":\"call\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":0,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":1,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"plain-id\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":2,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc\",\"call_id\":\"raw\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":3,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"id\":\"fc\",\"call_id\":\"\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":4,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"a\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":5,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":6,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"c\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":7,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"trail\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":8,\\\"a\\\":1}\"},{\"type\":\"function_call\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"name\":\"f\",\"arguments\":\"{\\\"z\\\":9,\\\"a\\\":1}\"},{\"type\":\"function_call_output\",\"call_id\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"output\":\"result-9\"},{\"type\":\"function_call_output\",\"call_id\":\"trail\",\"output\":\"result-8\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-7\"},{\"type\":\"function_call_output\",\"call_id\":\"c\",\"output\":\"result-6\"},{\"type\":\"function_call_output\",\"call_id\":\"a\",\"output\":\"result-5\"},{\"type\":\"function_call_output\",\"call_id\":\"\",\"output\":\"result-4\"},{\"type\":\"function_call_output\",\"call_id\":\"raw\",\"output\":\"result-3\"},{\"type\":\"function_call_output\",\"call_id\":\"plain-id\",\"output\":\"result-2\"},{\"type\":\"function_call_output\",\"call_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"output\":\"result-1\"},{\"type\":\"function_call_output\",\"call_id\":\"call\",\"output\":\"result-0\"}],\"stream\":true,\"store\":false}"
+      }
+    }
+  ]
+}

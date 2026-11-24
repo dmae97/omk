@@ -1,0 +1,1376 @@
+{
+  "schema": "omk.anthropic.tool-history.v1",
+  "source": {
+    "scripts/fixtures/anthropic-tool-history-recorder.ts": "5f6038a847177afe15532a5d284b755aba7b5ea71e7e7d370b717903f4dea083",
+    "scripts/fixtures/anthropic-tool-history-cases.ts": "39116570dc6c49befa90a76cdc198b1cd797b25302572ca07a56294a87f7372d",
+    "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
+    "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
+    "packages/ai/src/providers/anthropic-client.ts": "6e6555d8d11e649c571060b5ee1042d6cc68c44d9f9250f99dc803fe725efd82",
+    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "packages/ai/src/providers/anthropic-image-guard.ts": "9ca6ebf22d2f83ca5c8b5daf73c50883f3589ff1c48ecbae6b761e40c937abd6",
+    "node_modules/@anthropic-ai/sdk/package.json": "fcfaedec125d8cdfa6174f2ffae129f0ad34c681cad90a2a9dc9118cd9caecfa"
+  },
+  "projection": {
+    "headersExcluded": [
+      "x-stainless-*",
+      "user-agent"
+    ],
+    "scope": "same-model tools, text results and thinking history, API key, cache disabled"
+  },
+  "cases": [
+    {
+      "id": "single-tool",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "parallel-tools",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_2",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "reverse-results",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_2",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"Synthetic result\",\"is_error\":false},{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "missing-all-results",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "missing-one-result",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_2",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"Synthetic result\",\"is_error\":false},{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "missing-at-eof",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"No result provided\",\"is_error\":true}]}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "interrupted-by-user",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "user",
+            "text": "Interrupt"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"user\",\"content\":\"Interrupt\"},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "interrupted-by-assistant",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Next assistant"
+              }
+            ]
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Next assistant\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "orphan-results",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "toolResult",
+            "toolCallId": "unknown",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "error-assistant",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "text",
+                "text": "Incomplete"
+              }
+            ],
+            "stopReason": "error"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "aborted-assistant",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "aborted"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "error-flushes-pending",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Reading"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "second.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "failed",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "error"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "failed",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}},{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"second.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "trim-result-id",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": " \tcall_1﻿",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "same-model-id-unchanged",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call|🌍",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call|🌍",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call|🌍\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call|🌍\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "duplicate-results",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false},{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "empty-tool-result",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "multiblock-error-result",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "Last\n🌏"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"First\\n\\nLast\\n🌏\",\"is_error\":true}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "argument-key-order",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "2": 2,
+                  "10": 10,
+                  "z": 1,
+                  "a": {
+                    "second": [
+                      null,
+                      false,
+                      0.25
+                    ],
+                    "first": "quote: \" slash: \\ nul: \u0000"
+                  }
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"2\":2,\"10\":10,\"z\":1,\"a\":{\"second\":[null,false,0.25],\"first\":\"quote: \\\" slash: \\\\ nul: \\u0000\"}}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "signed-thinking",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "Reasoning 한글",
+                "thinkingSignature": "synthetic-signature"
+              },
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"Reasoning 한글\",\"signature\":\"synthetic-signature\"},{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "unsigned-thinking",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "Unsigned reasoning"
+              },
+              {
+                "type": "text",
+                "text": "Reply"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Unsigned reasoning\"},{\"type\":\"text\",\"text\":\"Reply\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "blank-signature",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "Reasoning",
+                "thinkingSignature": " \t"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reasoning\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "empty-thinking",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿ ",
+                "thinkingSignature": "synthetic-signature"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "redacted-thinking",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "",
+                "thinkingSignature": "synthetic-opaque",
+                "redacted": true
+              },
+              {
+                "type": "text",
+                "text": "Reply"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"redacted_thinking\",\"data\":\"synthetic-opaque\"},{\"type\":\"text\",\"text\":\"Reply\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "blank-blocks",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": " \t"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": " Keep "
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"\"},{\"type\":\"text\",\"text\":\" Keep \"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "two-tool-turns",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_2",
+                "name": "read",
+                "arguments": {
+                  "path": "한글/🌍.txt"
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_2",
+            "content": [
+              {
+                "type": "text",
+                "text": "Synthetic result"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "Done"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_2\",\"name\":\"read\",\"input\":{\"path\":\"한글/🌍.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_2\",\"content\":\"Synthetic result\",\"is_error\":false}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Done\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    }
+  ]
+}

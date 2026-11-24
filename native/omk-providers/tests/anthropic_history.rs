@@ -65,7 +65,7 @@ fn unsupported_history_roles_and_extra_fields_fail_closed() {
     for history in [
         json!([{"role":"toolResult","text":"not a supported text message"}]),
         json!([{"role":"assistant","text":"reply","thinkingSignature":"not supported"}]),
-        json!([{"role":"user","content":[]}]),
+        json!([{"role":"user","content":[{"type":"toolCall","id":"call_1","name":"read","arguments":{}}]}]),
     ] {
         let mut input = corpus()["cases"][0]["input"].clone();
         input["history"] = history;

@@ -1,0 +1,1207 @@
+{
+  "schema": "omk.openai-completions-tools.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-tools-recorder.ts": "74356656e92680e1ee337a144ac524442f9e127f1c94c678db53473d1cc53a2a",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "pair-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"first\\n\\nsecond\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "parallel-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "before"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "text",
+                "text": "after"
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "﻿b ",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"beforeafter\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"(see attached image)\",\"tool_call_id\":\"b\"},{\"role\":\"tool\",\"content\":\"(see attached image)\",\"tool_call_id\":\"a\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "missing-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "ok"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "c",
+                "name": "fn_c",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"ok\",\"tool_call_id\":\"b\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"user\",\"content\":\"next\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"fn_c\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"c\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "dropped-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "toolResult",
+            "toolCallId": "orphan",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "error"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "aborted"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "late-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "next"
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "late"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "again"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"next\"},{\"role\":\"tool\",\"content\":\"late\",\"tool_call_id\":\"a\"},{\"role\":\"tool\",\"content\":\"again\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "images-false",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": false,
+          "requiresAssistantAfterToolResult": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "mixed"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"(tool image omitted: model does not support images)\",\"tool_call_id\":\"b\"},{\"role\":\"tool\",\"content\":\"mixed\\n(tool image omitted: model does not support images)\",\"tool_call_id\":\"a\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "pair-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "first"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "second"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"first\\n\\nsecond\",\"tool_call_id\":\"a\",\"name\":\"result_name\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "parallel-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "before"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "text",
+                "text": "after"
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "﻿b ",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"beforeafter\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"(see attached image)\",\"tool_call_id\":\"b\",\"name\":\"result_name\"},{\"role\":\"tool\",\"content\":\"(see attached image)\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"I have processed the tool results.\"},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "missing-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "ok"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "c",
+                "name": "fn_c",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"ok\",\"tool_call_id\":\"b\",\"name\":\"result_name\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\",\"name\":\"fn_a\"},{\"role\":\"assistant\",\"content\":\"I have processed the tool results.\"},{\"role\":\"user\",\"content\":\"next\"},{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"c\",\"type\":\"function\",\"function\":{\"name\":\"fn_c\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"c\",\"name\":\"fn_c\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "dropped-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "toolResult",
+            "toolCallId": "orphan",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "error"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "aborted"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "late-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "next"
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "late"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "again"
+              }
+            ],
+            "isError": true
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\",\"name\":\"fn_a\"},{\"role\":\"assistant\",\"content\":\"next\"},{\"role\":\"tool\",\"content\":\"late\",\"tool_call_id\":\"a\",\"name\":\"result_name\"},{\"role\":\"tool\",\"content\":\"again\",\"tool_call_id\":\"a\",\"name\":\"result_name\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "images-true",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "system": "",
+        "vision": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresToolResultName": true,
+          "requiresAssistantAfterToolResult": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "fn_a",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              },
+              {
+                "type": "toolCall",
+                "id": "b",
+                "name": "fn_b",
+                "arguments": {
+                  "2": 3,
+                  "10": 4,
+                  "z": [
+                    "\n한글",
+                    {
+                      "b": 1e-7,
+                      "a": false
+                    }
+                  ],
+                  "a": null,
+                  "required": null
+                }
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "b",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "a",
+            "toolName": "result_name",
+            "content": [
+              {
+                "type": "text",
+                "text": "mixed"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "eA=="
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "user",
+            "content": "next"
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"fn_a\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}},{\"id\":\"b\",\"type\":\"function\",\"function\":{\"name\":\"fn_b\",\"arguments\":\"{\\\"2\\\":3,\\\"10\\\":4,\\\"z\\\":[\\\"\\\\n한글\\\",{\\\"b\\\":1e-7,\\\"a\\\":false}],\\\"a\\\":null,\\\"required\\\":null}\"}}]},{\"role\":\"tool\",\"content\":\"(see attached image)\",\"tool_call_id\":\"b\",\"name\":\"result_name\"},{\"role\":\"tool\",\"content\":\"mixed\",\"tool_call_id\":\"a\",\"name\":\"result_name\"},{\"role\":\"assistant\",\"content\":\"I have processed the tool results.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Attached image(s) from tool result:\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,eA==\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,eA==\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,eA==\"}}]},{\"role\":\"user\",\"content\":\"next\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    }
+  ]
+}

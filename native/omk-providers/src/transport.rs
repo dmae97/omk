@@ -1,7 +1,8 @@
+pub use crate::transport_send::{Cancellation, Error, Limits, Response, Transport};
 use std::{sync::OnceLock, time::Duration};
 
-/// Build-only transport probe. No credentials, request dispatch or live provider wiring.
-/// Defaults here are deliberately offline-test policy, not claimed Node transport parity.
+/// Explicit client policy: no implicit redirects, retries or inherited proxies.
+/// The 30-second ceiling and native trust roots are not claimed Node transport parity.
 pub fn build_client() -> Result<reqwest::Client, String> {
     static CRYPTO: OnceLock<Result<(), &'static str>> = OnceLock::new();
     CRYPTO
