@@ -21,7 +21,7 @@ Spec 120 is a `preserve` spec. K0 carries three of its gates.
 | --- | --- | --- | --- | --- | --- |
 | RC1 round trip | Synthetic sessions and RPC transcripts recorded from the TypeScript implementation at `48fb8e33a8` | Every fixture decodes and re-encodes to the same bytes | Zero differing fixtures | `cargo test --locked --manifest-path native/omk-contract/Cargo.toml` | Test output in the pull request |
 | PA2 table drift | `packages/coding-agent/src/core/pi-compat.ts` at the commit that lands T004 | Regenerating produces no diff | Zero differing lines | `node scripts/check-contract-drift.mjs` | Script exit status |
-| G0 default behavior | `packages/coding-agent/test/suite/g0-session-hash.ts` on the base | Unchanged | Unchanged | `npm run check`, then the G0 suite as the repository runs it | Check output |
+| G0 default behavior | Reviewed I1 corpus from `3045c4ca2f`, original base comparison retained in `g0-baseline-review.md` | Unchanged after the approved four-marker removal | No additional drift; legacy markers readable | `sh specs/120-rust-core/verify-k0.sh` | Manifest digests and T012 results |
 
 No comparative row applies. K0 makes no model call and measures no cost, latency or solve rate.
 
@@ -85,7 +85,18 @@ specs/120-rust-core/capability-matrix.json   # unit 9
 | Parallel tasks | 2 | Units 5 and 6 are independent after unit 4 |
 | Secret exposure | None | Fixtures are synthetic (A5). No credential, prompt or user path enters the repository |
 
-## Known obstacles
+## K0 closure, 2026-11-12
+
+T001 to T012 are locally complete with the explicit I1 baseline disposition.
+See `g0-baseline-review.md` and `tasks.md`. The full local gate is
+`sh specs/120-rust-core/verify-k0.sh`; `npm run check` now includes fresh fixture
+comparison through `check:contracts`. Historical T011 platform results do not
+make overall CI green or satisfy K5. K1 still needs final owner B1 approval.
+The [K1 review](k1-dependency-review.md) now records the J1-authorized temporary
+resolution, six target graphs and static/advisory findings. It authorizes no
+production dependency addition or build.
+
+## Historical obstacles at planning time
 
 - `packages/coding-agent/src/core/pi-compat.ts` has uncommitted changes from another session
   in this working tree. Unit 3 generates that file, so it waits until those changes are

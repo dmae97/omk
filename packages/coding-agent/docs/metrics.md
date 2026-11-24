@@ -224,6 +224,17 @@ A complete audit means recorded outcomes passed these checks, not that every
 provider request obeyed a single-model contract. Wire provenance, actual billing,
 repeated-trial analysis, and statistical superiority need separate evidence.
 
+### Repeated-trial audit
+
+The checkout-only `scripts/tb21-repeat-audit.mjs` composes explicitly pinned TB
+manifests without changing the single-run audit. It reports task-macro pass@1,
+finite-sample pass@k and all-k-success estimates, total costs and failures. Reused
+trial IDs, changed conditions, missing results/costs and nonterminal records fail
+closed. It starts no model and does not verify trial independence or superiority.
+The input schema, estimator and limitations are in `tb21-repeat-audit.md` next to
+this file. Research and subsequent promotion gates are in
+`harness-roadmap-2026-11.md`; no model benchmark was run for this implementation.
+
 ### Output-limit validation: availability history
 
 **2026-09-13 source snapshot (`ca75f4e5cc`):** the logical contract, CLI/SDK

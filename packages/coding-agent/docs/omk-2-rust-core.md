@@ -1,13 +1,86 @@
 # OMK 2.0 Rust core plan
 
-Status: **plan; stage K0 delivered, K1 to K5 not started**. Recorded 2026-11-10 on
-branch `2.0.0` at `48fb8e33a8`; K0 closed 2026-11-12 at `3632e73ffa` (see
-[K0 status](#k0-status-2026-11-12)). The workspace version on `2.0.0` is 1.5.11, and
-versions stay unchanged by this work until the release gates in
-[the migration roadmap](omk-2-migration.md) pass. The contract for
+Current integration status, 2026-11-14: the `2.0.0` native-default milestone is
+published, but the Rust migration remains prerelease. K1 has bounded offline
+provider/request slices, including [text history](../../../specs/120-rust-core/k1-text-history.md);
+it is not a selectable Rust agent or complete K1. K5 and Pi-zero/platform gates
+remain open. The dated decisions and proposed release scope below are historical
+planning records, not claims that those gates passed in the published milestone.
+
+Status: **K0 locally accepted under owner-approved baseline decision I1**. Updated 2026-11-12
+against `3045c4ca2f` on branch `2.0.0`. The measured baseline below is the original
+2026-11-10 record at `48fb8e33a8`, not today's inventory. A separate lane is
+working on K1's first provider unit; that is not K1 acceptance. K2 to K8 remain
+planned. K0 does not select a Rust runtime or authorize a release. Release gates remain in
+[the migration roadmap](omk-2-migration.md). The contract for
 stages K0 to K5 is spec 120, `specs/120-rust-core/spec.md`. Every decision behind
 it is recorded by ID in `specs/120-rust-core/decisions.md`, and the K0 work is laid
 out in `plan.md` and `tasks.md` in the same directory.
+
+## K0 status and verification, 2026-11-12
+
+There is no user migration step at K0. Node still runs the agent, extensions and
+SDK. `OMK_RUST_CORE` is the planned K5 selection contract, not an available K0
+switch; `OMK_RUST_EXECUTION_HOST` selects only the separate Linux execution host.
+
+Implemented in `native/omk-contract`:
+
+- Session JSONL, public RPC and extension-host wire types. There is no host
+  transport, agent loop or production caller of the crate.
+- Generated type-only declarations under
+  `packages/protocol/src/generated/rust-contracts/`, not exported from the package
+  root. The Node core's `pi-compat.ts` is generated from Rust; its runtime body is
+  unchanged. The default dialect stays `omk`, with explicit `omk+pi` compatibility.
+- A checked capability matrix with 75 features and 25 built-in files. Its
+  `ported`, `hosted` and `refused` entries are K5 commitments, not evidence that
+  those Rust features already run. Named refusal tests remain a K5 gate.
+
+Run from the repository root, with the pinned Rust toolchain and npm dependencies:
+
+```sh
+sh specs/120-rust-core/verify-k0.sh
+```
+
+This runs local contract/drift/matrix/native checks, skill-admission and session
+regressions, then `npm run check`. The latter now includes `check:contracts`,
+which compares fresh G0/RPC recordings without rewriting stored fixtures.
+The older `verify-k0-goal.sh` remains narrower and is not full K0 acceptance.
+Neither command executes native macOS/Windows CI.
+
+| Check at `3045c4ca2f` | Observed result |
+|---|---|
+| Full local K0 verifier | Exit 0; 38 contract integration tests, 15 skill-admission/session-equivalence tests and all native crate checks |
+| RC1 stored corpus | All 20 approved G0 records and 35 RPC transcript rows round-trip; legacy markers remain decodable; archived projections are not fresh runtime parity |
+| PA2 and declaration drift | Exit 0; 19 wire artifacts and `pi-compat.ts` match Rust |
+| Repository check at T012 closure | Exit 0; script tests report 617 passed, 30 skipped. Skips are not acceptance evidence |
+| G0 versus `48fb8e33a8` | Explicit I1 disposition: four empty markers removed (24 to 20 entries), no other semantic change; all six provider requests identical |
+| Fresh fixture recording, `--check` | Exit 0 against all ten approved data files; manifest hashes verified |
+
+G0 used `node --import tsx test/suite/g0-session-hash.ts` from
+`packages/coding-agent` in each tree, sequentially with the same isolated home and
+`TMPDIR`, a cleared inherited environment, `OMK_BASH_SANDBOX=off` for the faux
+provider test, and no Rust core selection. The baseline was extracted from Git;
+both runs used the installed npm dependencies and each tree's source mappings.
+The script exits 0 after recording even when the two trees differ: compare the
+`G0_DUMP/session.jsonl` and `G0_DUMP/requests.jsonl` files byte for byte as well.
+
+Existing commit `8560a93285` suppresses empty `skill_admission_turn` markers. In a
+separate baseline copy, replacing only `skill-admission-session.ts` with the
+current file reproduced both current G0 outputs exactly. This identifies the
+four missing markers and resulting entry-ID/parent changes, not a Rust port
+regression. The owner then explicitly approved retaining that behavior and
+refreshing its baseline (decision I1). Only `g0/session.jsonl` and its manifest
+changed; requests, RPC and seven archived goldens remain byte-identical. No
+normalization or tolerance was widened. The before/after digests and review are
+in `specs/120-rust-core/g0-baseline-review.md`. T012 is complete locally.
+
+T011's `cargo`, `rust-macos` and `rust-windows` jobs passed in
+[run 42988270672](https://github.com/dmae97/omk/actions/runs/42988270672) at
+`09b6389aac`. Production contract sources, toolchain, native checker and CI
+workflow are unchanged; the refreshed fixture and new legacy-marker regression
+have local Linux evidence, not a new native platform run. This is historical K0
+crate evidence, not K5/PL1 acceptance. The overall run
+failed (`build-check-test` and `secret-scan`); it is not green CI.
 
 ## Owner direction, 2026-11-10
 
@@ -25,7 +98,8 @@ one authority owner per boundary, no dual execution of side effects, and no defa
 flip without acceptance evidence. What changes is the end state. Node stops being
 the owner of the core and becomes the runtime of the extension host.
 
-This document is a plan for review. It approves no dependency, starts no port, and
+The later-stage design in this document remains a plan for review. It approves no
+dependency, starts no further port, and
 does not replace `specs/constitution.md` or
 [spec 108](../../../specs/108-pi-decoupling/spec.md).
 
@@ -71,24 +145,20 @@ dependency.
 The Rust share of the codebase is under two percent. A full core port is a
 multi-release effort. Treat any schedule that assumes otherwise as unreviewed.
 
-After K0 (2026-11-12) there are five crates and 7,761 lines under `native/`: the
-four above plus `omk-contract` (3,739 lines). `omk-contract` has no production
-caller either; the Node core consumes only the TypeScript it generates.
-
 ## Remaining Pi surface
 
-From `node scripts/pi-inventory.mjs --check` (exit 0) and
+At the 2026-11-10 baseline, from `node scripts/pi-inventory.mjs --check` (exit 0) and
 `specs/108-pi-decoupling/pi-inventory.generated.json`: 9 manifest dependencies,
 74 imports or mentions, 14 runtime aliases, 4 alias consumers.
 
-| Surface | Observed today | Replacement |
+| Surface | Observed at the 2026-11-10 baseline | Replacement / current delta |
 |---|---|---|
 | `@mariozechner/clipboard` | `optionalDependencies` of `packages/coding-agent`, required from `src/utils/clipboard-native.ts`; seven more rows in `scripts/cross-platform-clipboard/package.json` | Clipboard access in the Rust core. `arboard` is a candidate, not an approved dependency. OSC 52 stays as the fallback |
 | `@earendil-works/gondolin` | Dependency of the `gondolin` example extension and one root `overrides` entry | A separate project used by one example. Owner decides whether the example stays; it is not a core dependency either way |
 | Runtime aliases | 14 specifiers in `LEGACY_PI_RUNTIME_ALIASES` (`src/core/pi-compat.ts`). Consumers: `packages/ai/src/index.ts`, `bundled-virtual-modules.ts`, `loader.ts`, `package-doctor-runtime-imports.ts` | Kept behind the explicit `omk+pi` opt-in. The table is defined in the Rust contract crate; the host receives it as a generic specifier map |
 | `pi` manifest key | Accepted only under the explicit `omk+pi` dialect | Manifest resolution for both dialects moves to Rust. `omk package doctor` remains the migration path and moves with it |
-| `PI_*` environment variables | Six. Five are exported to bash child processes by `src/core/tools/bash.ts`: `PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`, `PI_REASONING_LEVEL`. One is read: `PI_CLIPBOARD_OSC52`. No `OMK_*` equivalent is exported. Three more `PI_*` identifiers in source are not variables OMK uses: two strings in a doctor detection pattern and one code constant | Scripts and extensions may read the five exported names, so they stay, and `OMK_*` counterparts are exported alongside them (G2) |
-| Imports and mentions | 74 rows: 68 in test scope, 5 in `src` (one `require`, four mentions), 1 in `scripts` | Ratchet the `src` scope to zero. Test fixtures that prove rejection of legacy imports stay |
+| `PI_*` environment variables | Six at the baseline. Five bash session exports and one clipboard input (`PI_CLIPBOARD_OSC52`); no OMK session aliases then. Three other identifiers are two doctor-pattern strings and a code constant | G2 is now implemented on the Node bash source path: five matching `OMK_*` aliases, inherited values stripped for both namespaces before per-command injection. Legacy names remain; installed/Rust/platform acceptance is separate. See [session environment](environment-variables.md#bash-tool-session-environment) |
+| Imports and mentions | 74 rows: 68 in test scope, 5 in `src` (one `require`, four mentions), 1 in `scripts` | The 2026-11-12 classifier correction preserves all rows and moves three script-fixture mentions to `scripts`. The subsequent JSDoc migration to `omk-agent-core` removes only that obsolete mention: now 73 rows, 68 test, 4 scripts, 1 src. The clipboard require remains; Pi-zero is still open |
 | Fork lineage | `omk-ai`, `omk-agent-core`, `omk-tui` and `open-multi-agent-kit` started as a fork of Pi (MIT), recorded in `NOTICE` | A Rust port of MIT code is still derived work. `LICENSE` and `NOTICE` keep the original copyright after the port |
 
 "Pi-zero" is a 2.0.0 gate, so it has to hold for the Node core as well as the Rust
@@ -101,9 +171,22 @@ not only on source:
   That is already true since the native default, and the opt-in stays.
 - Every `PI_*` variable is classified, and the five exported to bash have `OMK_*`
   counterparts.
-- The `src` scope of the inventory has zero rows.
+- The `src` scope of the inventory has zero rows. After script-fixture
+  classification and JSDoc cleanup, the clipboard require remains as one source
+  row. An inventory pass only means it matches its stored list, not that PZ1 passed.
 
 ## Target architecture
+
+The diagram is the **K8 end state**, not the K5 release architecture. Ownership
+is stage-specific:
+
+| Boundary | Current source | K5 release contract | K6 to K8 target |
+|---|---|---|---|
+| Agent, provider and session owner | Node | Node by default; explicitly selected Rust headless core owns its own sessions and loop | Rust by default only after K8 acceptance |
+| Goals, verified-run authority, grants, scheduler | Node, with opt-in Linux Rust process supervision | Still Node on the Node path; Rust-selected unsupported features fail by name under CM1 | Transfer each boundary once in K7 |
+| Extension execution | In-process Node loader | Node child host for the selected Rust core; parity remains a K4 gate | Node remains the extension runtime |
+| Terminal UI | Node TUI and optional status surfaces | Unchanged Node UI; interactive Rust selection refused | Rust UI in K6 |
+| Desktop workbench | Bounded observation/control prototypes | Not part of 2.0.0 | Separately accepted public-RPC client |
 
 ```text
 ┌──────────────────────── omk (Rust binary) ────────────────────────┐
@@ -121,9 +204,14 @@ not only on source:
 └──────────────────────────────────┘
 ```
 
-The Rust process is the single writer for sessions, grants, budgets and settlement.
-The extension host is a client. It can propose, veto where the API already allows a
-veto, and render, but it holds no durable state of its own.
+For each migrated boundary the Rust process is its single writer. At K5 that
+covers its agent/session/tool state, not the Node verified-run grant ledger or
+scheduler deferred to K7. A headless Rust selection must refuse unsupported
+subsystems rather than silently delegating their authority. The extension host
+is a client: it may propose, veto where the API permits, and supply render output,
+but it does not own core session or authority state. Extensions retain their
+existing Node file/network capabilities; a read-only core replica is not an OS
+sandbox or a prohibition on extension-owned persistence.
 
 ### Why an extension host and not an embedded engine
 
@@ -143,12 +231,14 @@ What OMK extensions actually use, counted in this checkout:
   and unrestricted Node built-ins ([Available Imports](extensions.md#available-imports)).
 
 A shim layer would have to reproduce all of that before the first extension loads
-unchanged. An out-of-process host runs the same loader on the same engine, so
-compatibility starts at parity and the risk moves to one place: the wire.
+unchanged. An out-of-process host can reuse the loader and engine. That reduces engine-shim
+work but does not establish parity: callbacks, synchronous reads, stream delivery,
+resource lifetimes and UI now cross a process boundary and still need conformance
+evidence.
 
 | Tier | Runtime | Role |
 |---|---|---|
-| 1 | Node extension host over a private wire | Decided 2026-11-10. Full compatibility with existing extensions |
+| 1 | Node extension host over a private wire | Decided 2026-11-10. Compatibility is the K4 acceptance target, not an implemented guarantee |
 | 2 | Embedded JavaScript engine | Not 2.0 work. A later option for installs without Node, with its own conformance evidence |
 | 3 | MCP servers | Already supported. The right home for heavy integrations |
 
@@ -211,9 +301,10 @@ Compatibility is measured, not asserted. The corpus is the 80 entries under
 `examples/extensions`, the project extensions under `.omk/extensions`, and an
 owner-supplied must-pass list of installed packages. Each case runs against the
 current Node core and the Rust core with the offline provider, and the gate compares
-event order, tool calls, tool results, session entries and rendered lines. A case
-that cannot run on the Rust core is recorded as blocked or excepted, never dropped
-from the count.
+event order, tool calls, tool results and session entries at K4, with rendered-line
+and input checks at K6. A UI-dependent case that cannot run at K5 remains blocked
+unless the owner approves that case's named exception under F2. CM1's refusal
+label alone does not satisfy EH1. No case is dropped from the count.
 
 ## Migration order
 
@@ -261,10 +352,11 @@ stages K0 to K5 and three-platform acceptance of the headless core.
 
 ### Compatibility adapter
 
-The owner kept the `omk+pi` adapter and asked for it to be fully Rust. Today it is
-TypeScript: `src/core/pi-compat.ts` (alias table, legacy-import classifier,
-migration hint), the `pi` key in `src/core/package-manifest.ts`, and the static
-diagnosis in `src/core/package-doctor*.ts`.
+The owner kept the `omk+pi` adapter and asked for it to be fully Rust. K0 now owns
+the alias table, legacy-import classifier and migration hint in Rust and generates
+`src/core/pi-compat.ts` for the Node core. Manifest resolution in
+`src/core/package-manifest.ts` and static diagnosis in `src/core/package-doctor*.ts`
+still run in TypeScript; moving those behaviors belongs to K4.
 
 - The dialect values, alias table, classifier and hint text are defined once, in
   the K0 contract crate. While the Node core exists its copies are generated.
@@ -281,7 +373,8 @@ installer half of the package manager (npm and git operations) stays K7.
 
 ### Platforms
 
-The owner decided that Linux, macOS and Windows are all supported. Observed today:
+The owner decided that K5 must support Linux, macOS and Windows. Execution
+supervision at the recorded baseline (separate from K0 contract-crate builds):
 
 | Platform | Node core bash sandbox | Rust today |
 |---|---|---|
@@ -297,9 +390,10 @@ same platform. Two points follow:
    Decision C1 keeps it. A native Windows sandbox is a new capability and a later
    spec.
 
-Every CI job runs on Ubuntu today and none runs cargo. Decisions C3 to C7 add a
-macOS job, a Windows job and a cargo job, and build releases natively on those
-runners. The release targets are the six the Bun build already ships (C2).
+T011 added the `cargo`, `rust-macos` and `rust-windows` CI jobs. Linux checks every
+native crate; macOS and Windows check `omk-contract`, not the Linux-only execution
+supervisor. Their recorded results are in [K0 status](#k0-status-and-verification-2026-11-12).
+Native Rust release builds for the six targets remain later-stage work (C2, C6).
 
 ### Terminal UI direction
 
@@ -342,9 +436,9 @@ Rules that carry over unchanged:
 
 ## What does not move
 
-- The seven npm packages keep their names. `open-multi-agent-kit` becomes the
-  installer for the Rust binary plus the extension host; the library packages
-  become the extension SDK.
+- The seven npm packages keep their names. Decision E1 distributes the planned
+  Rust binary as a GitHub Release asset, selected by path, without changing npm
+  delivery. The library packages remain available to extensions.
 - `packages/initcheck` and `packages/promptguard` are Go modules outside the
   lockstep version. Folding them into the Rust workspace is a separate decision.
 - Session files, `settings.json`, `auth.json`, `models.json` and the `~/.omk`
@@ -353,65 +447,41 @@ Rules that carry over unchanged:
 - The Orbit and gpui-flow desktop work. It is a client of the public RPC and does
   not depend on this plan.
 
-## K0 status, 2026-11-12
-
-Stage K0 (spec 120 tasks T001 to T012) is delivered on `2.0.0` through pull
-requests #417 and #418, with the G0 fixture re-recorded under T012. No production
-caller uses the contract crate, and the Node core behaves as before except for
-the #418 fix below.
-
-| Gate | Check | Result |
-| --- | --- | --- |
-| RC1 | `cargo test --locked --manifest-path native/omk-contract/Cargo.toml` | Pass. 20 G0 session records and 35 RPC transcript rows re-encode byte for byte |
-| PA2 | `node scripts/check-contract-drift.mjs` | Pass. 19 declaration files and `pi-compat.ts` match Rust; a hand edit of `pi-compat.ts` fails |
-| G0, every default-on flag `0` | `test/suite/g0-session-hash.ts`, base `48fb8e33a8` against head `3632e73ffa`, same script and `TMPDIR` | Identical: session `1dfa40a7d0f2…`, provider requests `63ab57c90c02…` |
-| G0, defaults | Same script, head against `origin/main` `b8f3d1a1ec` | Identical: session `2da8abecdb15…`, provider requests `26c289af3080…`. Against `48fb8e33a8` only four `skill_admission_turn` entries differ |
-| Capability matrix | `node scripts/check-capability-matrix.mjs` | Pass. 75 features and all 25 built-in extension files, one disposition each |
-| Rust in checks and CI | `npm run check:native`; CI jobs `cargo`, `rust-macos`, `rust-windows` | Pass locally and on [run 43146789487](https://github.com/dmae97/omk/actions/runs/43146789487) at `3632e73ffa` |
-| Repository | `npm run check` and `npm test` (CI `build-check-test`) | Pass on the same run |
-
-The default-mode G0 difference is intentional. The 2.0.0 snapshot made every prompt
-write a `skill_admission_turn` marker even when no skill was admitted; #418 writes
-it only when the prompt's scope holds an admission record, which restored the
-session bytes that `main` writes. The contract fixture `g0/session.jsonl` was
-re-recorded with `scripts/record-contract-fixtures.mjs` for the same reason (24 to
-20 records).
-
-Limits of this evidence:
-
-- macOS and Windows ran only the contract crate's format, Clippy and tests. That is
-  the K0 platform scope, not three-platform acceptance (PL1 is a K5 gate).
-- `record-contract-fixtures.mjs --check` is not portable. The faux provider counts
-  tokens as `ceil(chars / 4)` and the system prompt contains the checkout path, so a
-  checkout path of a different length changes the RPC transcript's usage numbers.
-  It passes from a path as long as the repository root, and it is in neither
-  `npm run check` nor CI.
-- The `secret-scan` CI job fails on `workflow_dispatch` runs because it scans every
-  ref's history; `gitleaks` over the K0 commit ranges found nothing.
-
 ## What is still open
 
-The owner's questions are closed in `specs/120-rust-core/decisions.md`. Three
-things still need the owner before the stage that uses them:
+The initial decisions are recorded in `specs/120-rust-core/decisions.md`; they are
+not implementation evidence. These prerequisites remain before their stages:
 
-1. **The K1 dependency review.** `tokio`, `reqwest` and `rustls` are selected as
-   candidates (B2 to B4). None enters a lockfile until the owner approves the review
-   bundle (B1). K0 needs no new crate.
+1. **K1 adoption and validation.** J1 covered temporary resolution only. The
+   concurrent K1 lane now records a scoped B1 adoption in
+   `specs/120-rust-core/k1-adoption.json`, with the exact review/notices digests;
+   its earlier review's pending header is not a current completion signal.
+   Check that lane's frozen graph, builds and independent replay before recording
+   K1 acceptance. This document adds no dependency approval and does not approve
+   any changed graph. The new lane artifacts are checkout-only until committed.
 2. **The wire cost threshold.** K4 measures and reports it. The pass threshold is
    approved before K5 (F5).
 3. **The terminal UI engine.** Port the existing renderer or build on a Rust
    library. It is K6 work and does not block 2.0.0.
 
-K0 left review items that do not block K1:
+Implementation prerequisites are also still open:
 
-- The capability matrix classifies `identical-loop.ts` and
-  `finish-check-reverify-stage.ts` as refused, not as safety gates, although both
-  block tool calls. Each carries a `reviewNote`; F4 needs the owner's reading before
-  K3.
-- Refusing a default-on built-in under the Rust core needs a defined trigger and an
-  observable error before K5 (CM1).
-- The stagehand project extension now loads `@browserbasehq/stagehand` on first
-  browser use, an exception to the top-level import rule recorded in #418.
+- K4 needs bidirectional request/results for API calls and hosted provider/tool
+  callbacks, cancellation and ordering. K0's `CoreFrame`/`HostFrame` vocabulary is
+  a scaffold, not a complete transport; it currently has `ApiCall` without a
+  core-to-host API-result frame. Reads following writes inside one handler need
+  an explicit consistency rule and tests before K4 acceptance.
+- The clipboard native addon has its own G1/B1 review and six-target delivery
+  work; it is not supplied by the provider dependency review. It gates Node
+  Pi-zero before K5 even though Rust terminal clipboard is K6.
+- The inventory remains broader than runtime imports. The 2026-11-12 correction
+  gives parsed imports and catch-all mentions the same file-scope classification;
+  all three artifact-script fixture literals remain recorded under `scripts`.
+  The stale JSDoc example now names `omk-agent-core`, leaving only the clipboard
+  require in `src`. Do not delete rejection fixtures or hide runtime imports to
+  reach PZ1's zero-src gate.
+- Native Windows/macOS binary-pin equivalence and the spec-109 distribution
+  contract remain open before K5; contract-crate CI alone proves neither.
 
 ## Verification status of this document
 
@@ -425,8 +495,5 @@ were wrong and are fixed above.
 
 Not checked: what each internal import of a built-in extension does, whether every
 one of the 28 events has a blocking return path, and any claim about another project beyond what its
-README or the cited survey states. No code was built or run for this plan.
-
-Added 2026-11-12: the K0 status section and the post-K0 line count. Its results
-come from the commands it names, run on `3632e73ffa` and the cited CI run; the
-plan sections above were not re-verified.
+README or the cited survey states. The original plan ran no code; the later K0
+verification and its explicit I1 baseline disposition are recorded above.

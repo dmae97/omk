@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /** Synthetic K0 evidence. Recorders run in isolated homes; no credentials or network lookup. */
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { inventory, normalizeJsonl, parseJson, privacyScan, sha256, validateManifest } from "./fixtures/contract-fixture-utils.mjs";
+import { createRecordingWorkDir, inventory, normalizeJsonl, parseJson, privacyScan, sha256, validateManifest } from "./fixtures/contract-fixture-utils.mjs";
 import { recordRpc } from "./fixtures/contract-rpc-recording.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -14,8 +13,9 @@ const FIXTURES = join(ROOT, "native/omk-contract/tests/fixtures");
 const args = process.argv.slice(2);
 if (args.some((arg) => arg !== "--check") || args.length > 1) throw new Error("usage: record-contract-fixtures.mjs [--check]");
 const check = args.includes("--check");
-const work = mkdtempSync(join(tmpdir(), "omk-contract-fixtures-"));
+const work = createRecordingWorkDir();
 const fresh = join(work, "fixtures");
+let rpcWork;
 
 function run(command, args, options) {
 	const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180_000, ...options });
@@ -35,14 +35,19 @@ function sourceIdentity() {
 
 async function record() {
 	for (const path of [fresh, join(work, "home"), join(work, "tmp"), join(work, "g0")]) mkdirSync(path, { recursive: true });
+	// RPC's reviewed package path is 46 code units, independent of checkout location.
+	rpcWork = createRecordingWorkDir(undefined, 44);
+	const rpcPackage = join(rpcWork, "p");
+	symlinkSync(PACKAGE, rpcPackage, process.platform === "win32" ? "junction" : "dir");
 	const env = {};
 	for (const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT"]) if (process.env[key]) env[key] = process.env[key];
 	Object.assign(env, {
 		HOME: join(work, "home"), USERPROFILE: join(work, "home"), XDG_CONFIG_HOME: join(work, "home"),
 		TMPDIR: join(work, "tmp"), TEMP: join(work, "tmp"), TMP: join(work, "tmp"),
 		OMK_CODING_AGENT_DIR: join(work, "home/agent"), OMK_BASH_SANDBOX: "off", G0_DUMP: join(work, "g0"),
+		OMK_PACKAGE_DIR: rpcPackage,
 	});
-	const normalize = (text) => normalizeJsonl(text, [[join(work, "tmp"), "<tmpdir>"], [work, "<work>"], [PACKAGE, "<pkg>"], [ROOT, "<repo>"]]);
+	const normalize = (text) => normalizeJsonl(text, [[rpcPackage, "<pkg>"], [join(work, "tmp"), "<tmpdir>"], [work, "<work>"], [PACKAGE, "<pkg>"], [ROOT, "<repo>"]]);
 	const origin = sourceIdentity();
 	run(process.execPath, ["--import", "tsx", "test/suite/g0-session-hash.ts"], { cwd: PACKAGE, env });
 	mkdirSync(join(fresh, "g0"));
@@ -91,4 +96,5 @@ try {
 	process.exitCode = 1;
 } finally {
 	rmSync(work, { recursive: true, force: true });
+	if (rpcWork) rmSync(rpcWork, { recursive: true, force: true });
 }

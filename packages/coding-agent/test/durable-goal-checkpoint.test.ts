@@ -77,7 +77,11 @@ describe("durable goal seam checkpoints", () => {
 
 		expect(advanced.checkpoint).toEqual(recorded.checkpoint);
 		expect(advanced.checkpoint?.goalGeneration).not.toBe(computeDurableGoalGeneration(advanced));
+		const restored = parseDurableGoalSnapshot(JSON.parse(JSON.stringify(advanced)));
+		expect(formatDurableGoalCheckpoint(restored)).toContain("Historical evidence (reverify): focused-tests");
+		expect(formatDurableGoalCheckpoint(restored)).not.toContain("Verified:");
 		expect(edited.checkpoint).toBeUndefined();
+		expect(formatDurableGoalCheckpoint(edited)).toBe("Goal: Ship a different verifier\nCheckpoint: none");
 	});
 
 	it("rejects stale evidence references and tampered persisted checkpoints", () => {

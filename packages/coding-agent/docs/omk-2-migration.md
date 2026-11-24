@@ -2,20 +2,106 @@
 
 ## Target and current status
 
-The owner-declared milestone is **Orbit-based native desktop UI + gpui-flow DAG
-views + Rust execution host**, with R as an independent development/CI oracle.
-Windows, Linux/WSLg and macOS are target platforms, not currently certified platforms.
+As of 2026-11-14, the published `2.0.0` milestone delivers the native `omk`
+manifest default, not a completed Rust core. The migration remains prerelease;
+K1 work is bounded offline provider parity, and K5/Pi-zero/platform acceptance is
+still open. The dated plan below preserves the earlier K5 target; its prospective
+release language is not a description of the already published milestone.
+
+The approved **Rust candidate release scope is K5**: the Pi-zero Node core stays the
+default, and a headless Rust core is explicitly selectable for print, JSON, RPC
+and ACP. Linux, macOS and Windows must pass native acceptance before that Rust
+candidate ships; no current platform certification is implied.
+
+The earlier Orbit/gpui-flow desktop target and remaining execution-host ownership
+are retained after 2.0.0 by decisions D1 to D4, not prerequisites of this release.
+The Rust terminal UI is K6; goals, the verified-run ledger and scheduler remain
+Node-owned until K7. R remains the independent development oracle for numeric
+policies actually ported in K0 to K5.
 
 The current delivery includes the read-only [run graph observation bridge](run-graph.md)
 and an opt-in [Rust sandbox execution host](#h1-real-rust-execution-supervision-2026-11-08) for Linux
 verified-run writer/verifier commands. Default execution, durable authority and
 scheduling remain Node. There is no migrated desktop application or full Rust
-agent controller. Package versions remain unchanged until release gates pass.
+agent controller. The current package version is `2.0.0`; these migration gates
+remain separate from the published milestone version.
 
 This is not a fresh specification framework or a replacement for existing specs.
 The repository constitution, existing runtime contracts and accepted N02 fixture remain authoritative.
 
+### Owner direction, 2026-11-10
+
+The owner widened the 2.0 target: replace every remaining Pi dependency, migrate
+the core itself to Rust, and keep existing extensions working. The earlier target
+moved single execution boundaries to Rust and left Node as the production owner.
+The staging rule is unchanged (one authority owner per boundary, no dual execution,
+no default flip without acceptance evidence), but the end state is now a Rust core
+with Node reduced to an extension host.
+
+The same day the owner fixed three points: 2.0.0 ships at stage K5, extensions run
+on Node in a host process, and the Rust terminal UI takes the look of the OpenTUI
+status panel header. 2.0.0 therefore contains the Node core as the default, Pi-zero,
+and the Rust core as an explicit opt-in for print, JSON, RPC and ACP. The Rust
+terminal UI, the remaining subsystems and the default flip come after 2.0.0. The
+contract for K0 to K5 is spec 120 (`specs/120-rust-core/spec.md`).
+
+Two further decisions followed. The `omk+pi` compatibility adapter is kept as an
+explicit opt-in and moves entirely to Rust: tables, manifest dialect and doctor are
+owned by Rust, and the Node host only applies a specifier map it is given. And the
+Rust core supports Linux, macOS and Windows in 2.0.0. Support means parity with the
+Node core on each platform, so native Windows keeps today's behavior, where bash is
+refused under the default sandbox policy and WSL2 is the documented path. A native
+Windows sandbox would be new work under its own spec.
+
+The owner then delegated the remaining 41 decisions. They are recorded by ID in
+`specs/120-rust-core/decisions.md`. Four of them change this roadmap's release
+gates: the desktop workbench (U1) and its platform acceptance (P0) move after
+2.0.0, the terminal observation phase merges into K6, the remaining execution-host
+ownership slices move to K7, and the independent oracle stays but is limited to the
+policies K0 to K5 port. 2.0.0 depends on the Pi-independent core staging below,
+stages K0 to K5, and three-platform acceptance of the headless core.
+
+The plan, its measured baseline and its open decisions are in
+[the Rust core plan](omk-2-rust-core.md). The survey of other harnesses and
+candidate Rust libraries is in `harness-survey-2026-11.md`. Neither document
+approves a new dependency or starts a further port. The original four-crate,
+roughly 4,000-line Rust inventory is a 2026-11-10 baseline, not current status.
+
+### K0 contracts, 2026-11-12
+
+`native/omk-contract` now owns the session/RPC/extension-host wire contracts and
+compatibility data. It generates TypeScript wire declarations and the Node
+core's `pi-compat.ts` table. There is no Rust agent or extension-host transport;
+Node remains the runtime, with no user migration or new core-selection switch.
+The checked matrix contains 75 features and 25 built-in files; its dispositions
+are commitments for K5, not current Rust capabilities.
+
+At source `3045c4ca2f`, the full local K0 verifier passes after owner-approved
+baseline decision I1. T012 is complete locally: G0 now has 20 entries instead of
+24, retaining `8560a93285`'s empty-marker suppression. Only that session fixture
+and its manifest changed; requests, RPC and archived goldens are byte-identical.
+Fresh recording is now checked by every `npm run check`. T011's three native CI
+jobs passed at `09b6389aac`; overall CI failed, and the refreshed fixture has
+local Linux evidence only. These results do not certify K5 platforms. See
+[K0 verification and reproduction](omk-2-rust-core.md#k0-status-and-verification-2026-11-12)
+for the commands, diagnostic comparison and acceptance limits.
+
+### Post-K0 harness work, 2026-11-12
+
+Spec 121 separates measured harness advances from the Rust parity port. The
+research review is `harness-research-2026-11.md`; the staged execution plan is
+`harness-roadmap-2026-11.md`, both next to this file. It adds explicit K1–K8 work
+units and gates, not a new scheduler or release scope. H1 fixes historical
+checkpoint labels; H2 adds offline repeated-trial audits. Context, delegation,
+evaluator and security studies remain separately gated work, with no model
+spend or performance claim in this change.
+
 ## Responsibility contract
+
+This table describes the eventual desktop/execution-host boundary, not today's
+runtime or a claim that K5 owns the K7 ledger. In K5, Rust owns its selected
+agent/session/tool paths; unsupported Node-only subsystems must produce the
+capability matrix's named refusal, not start a second authority owner.
 
 | Component | Responsibility | Must not do |
 |---|---|---|
@@ -71,10 +157,12 @@ absence is not counted as success. Existing dirty/staged work is not a disposabl
 | C1 Rust observation consumer | Bounded typed decoding and monotonic full-snapshot view | Rust RED/GREEN and actual Node CLI to Rust binary tests | Implemented; not an execution host |
 | U0 compatibility spike | One Orbit/gpui-flow panel from reviewed pinned sources | Resolved GPUI graph; native build and input checks | Partial: adapted GPUI/gpui-flow sample renders on WSLg; Orbit shell and platform parity remain open |
 | R0 policy parity | Scope mathematical functions before porting them | Independent expected values, fixed inputs and decision/state checks | Partial: inactive finite DAG port and exact TS/R/Rust gate; broader policy parity remains open |
-| H0 host ownership slices | Move one existing execution boundary at a time | Approval, stale-owner fencing, cancellation/settlement, budget and crash tests | Partial: no-execution admission fixture plus opt-in Linux Rust sandbox supervision. Durable grants, scheduling, recovery journal and publication remain Node |
-| U1 live workbench | Session/chat/model/skills/MCP/diff/goal views and DAG observations | Feature matrix, real runtime events and reconnect tests | Not implemented |
-| P0 platform acceptance | Windows, Linux/WSLg and macOS installation paths | Installed-app behavior, IME/clipboard, recovery and resource checks | Not verified |
-| Release 2.0.0 | Feature and documentation closure | All required gates; constitution's milestone release procedure | Not eligible |
+| H0 host ownership slices | Move one existing execution boundary at a time | Approval, stale-owner fencing, cancellation/settlement, budget and crash tests | Partial: no-execution admission fixture plus opt-in Linux Rust sandbox supervision. Bounded slices H1 to H2i add durable termination receipts and execution records, opt-in writer/verifier reconnect, explicit native-record GC and Rust-enforced original phase caps. Approval, grant issuance and revocation, scheduling, reconciliation and publication remain Node |
+| K0 to K5 Rust core, headless | Contracts, providers, agent loop, tools, Node extension host, Rust-owned compatibility adapter, headless modes, Pi-zero, on Linux, macOS and Windows | Spec 120 gates, including extension conformance, rollback, the capability matrix and native runs on all three platforms | K0 locally accepted with I1 baseline review; T012 complete. A separate lane is developing the first K1 provider unit, not yet accepted; K2 to K5 remain planned. Required for 2.0.0 |
+| K6 to K8 Rust core, after 2.0.0 | Terminal UI in the OpenTUI header look, remaining subsystems, default flip | Per-stage gates in `omk-2-rust-core.md` | Planned; not part of 2.0.0 |
+| U1 live workbench | Session/chat/model/skills/MCP/diff/goal views and DAG observations | Feature matrix, real runtime events and reconnect tests | Not implemented. After 2.0.0 (decision D1) |
+| P0 platform acceptance | Windows, Linux/WSLg and macOS installation paths of the desktop application | Installed-app behavior, IME/clipboard, recovery and resource checks | Not verified. After 2.0.0 (decision D1). The headless core's platform acceptance is spec 120 gate PL1 |
+| Release 2.0.0 | Feature and documentation closure | All required gates; constitution's milestone release procedure | Not eligible. Required: the Pi-independent core staging, K0 to K5, and spec 120 gate PL1 on three platforms. U0, U1, P0 and the H0 remainder are not release gates (decisions D1 to D4) |
 
 U0 and R0 can proceed independently after their inputs are fixed. C1 does not
 imply H0: receiving an observation is not executing a tool. Node/Rust ownership
@@ -262,6 +350,29 @@ scheduling, sessions/providers, workbench/UI, publication and other platforms
 remain on their previous paths or unimplemented. The default and installed engine
 are unchanged.
 
+### H2 bounded slices, 2026-11-08 to 2026-11-10
+
+Nine further slices extended H1 without moving authority. All are opt-in, Linux
+only, and limited to `linux-command-v1` writer and verifier commands.
+
+| Slice | What Rust or the native path gained | Still Node |
+|---|---|---|
+| H2a | Durable termination receipts written after Rust witnessed the namespace gone | Restart reconciliation; a receipt only resolves an `unknown` probe |
+| H2b | Terminal execution records synced before `finished` is sent | Detachment and automatic reconnect stay disabled |
+| H2c | `omk run reconnect` re-observes the original writer with `OMK_RUST_EXECUTION_RECONNECT=1` | Grant, claims, deadline and budgets are the originals; no replacement dispatch |
+| H2d | The same reconnect for the original verifier and frozen candidate | Receipt publication |
+| H2e | `omk run gc` reports and deletes native records it can prove terminal | No automatic sweep |
+| H2f | `omk run gc --prune-obsolete` for orphan 1.5-era records | Live, bound or shared records are never touched |
+| H2g | Start and revocation provenance survives authority compaction | Dropped grants stay unavailable |
+| H2h | Settled grants are retained while recovery is still possible | Grant retention policy |
+| H2i | Rust enforces the original boot-bound phase cap after parent loss | Approval, grant issuance and revocation, scheduling, reconciliation, publication |
+
+Usage and acceptance detail are in `rust-execution-host.md` in this directory.
+Open after H2i: native authorization revocation, Rust ownership of the grant ledger
+and scheduler, witness retention, and reconnect for DAG, scripted-agent and session
+runs. Under the 2026-11-10 direction these continue as stage K7 of the Rust core
+plan.
+
 ## Pi-independent core staging
 
 The approved 2.0 target also removes implicit Pi compatibility from OMK's default
@@ -272,8 +383,10 @@ have been removed. Keep the existing spec-kit governance and
 bounded execution slices rather than replacing that specification.
 
 The first slice added `packageManifestDialect: "omk" | "omk+pi"` to
-`DefaultPackageManager` construction. Omission preserves current 1.x behavior.
-Explicit `omk` mode rejects Pi-only managed-package manifests without falling
+`DefaultPackageManager` construction. Omission preserved the earlier compatibility
+behavior at that slice; the [native default](#native-default-2026-11-08) below
+supersedes it.
+In that initial slice, explicit `omk` mode rejected Pi-only managed-package manifests without falling
 through to conventional files. It still accepts native manifests and packages
 with neither resource key, and preserves authoritative `omk` precedence and path
 validation. This is a package-manager construction boundary, not a CLI setting
@@ -286,11 +399,12 @@ the milestone's required R acceptance gates. A package-manifest dialect is neith
 an import firewall nor a sandbox. Installation, project trust and command approval retain
 their separate existing contracts.
 
-Before switching the final 2.0 default, verify the remaining import boundary with
-installed-package sentinels, transitive imports and subpaths, plus actual packaged
-Node and compiled-binary entry points. Preserve original sessions and notices;
-same-publisher dependencies are not automatically Pi runtime dependencies. Keep
-the current lockstep version until all milestone release gates pass.
+The native-default switch subsequently passed installed-package sentinels,
+transitive imports and subpaths, and packaged Node/compiled-binary checks for its
+frozen candidate. Preserve original sessions and notices; same-publisher
+dependencies are not automatically Pi runtime dependencies. New candidate bytes
+require fresh receipts. Do not infer current acceptance or authorize a version
+bump from that historical result.
 
 ### Explicit native consumer staging, 2026-11-05
 
@@ -335,16 +449,37 @@ process or per SDK construction.
 
 spec-108 disposition for this switch: the free Terminal-Bench equivalence
 criterion was waived by the owner on 2026-11-08. The other 108-2/108-3 criteria
-are recorded in the Phase 2 acceptance record. Versions remain 1.5.10 until the
-milestone release gates pass.
+are recorded in the Phase 2 acceptance record. That run used version 1.5.10;
+the source checkpoint on 2026-11-12 is 1.5.11. Neither number is 2.0.0 acceptance.
 
 The six authorized source-work steps are inventory, native wiring,
 repository/example migration, local-user preservation, diagnostics/documentation
 and verification including real artifacts. They are not ROADMAP Phase 6 or the
-whole 2.0 milestone. Desktop/platform acceptance, independent R acceptance and
-Rust execution ownership remain required roadmap work. The older spec-108
-equivalence, benchmark and module-swap obligations still need an explicit
-disposition before activation; they have not been waived or satisfied here.
+whole 2.0 milestone. The current release gates are Phase 2 closure, K0 to K5,
+independent R acceptance limited to ported policies, and headless platform
+acceptance. Desktop and remaining execution ownership are deferred by D1 to D4.
+The later decision D5a waives tokens-per-turn, and D5b retains module-sized
+changes at commit. Clipboard replacement, reviewed change splitting and fresh
+artifact/activation evidence remain open; these decisions do not certify them.
+
+### Remaining Pi surface, 2026-11-10
+
+`node scripts/pi-inventory.mjs --check` passes with 9 manifest dependencies, 74
+imports or mentions, 14 runtime aliases and 4 alias consumers. The native default
+removed implicit aliasing; it did not remove the surface. What is left:
+
+- `@mariozechner/clipboard`, an optional dependency of the CLI and the only Pi-era
+  package the production source still requires.
+- The 14 aliases in `src/core/pi-compat.ts` and their four consumers, reachable
+  only through the explicit `omk+pi` dialect.
+- Six `PI_*` environment variables: five exported to bash child processes and one
+  read for the clipboard.
+- `@earendil-works/gondolin` in one example extension and one root override. It is
+  a separate project, not a core dependency.
+
+The replacement for each is listed in `omk-2-rust-core.md`. The aliases stay
+reachable only through the explicit `omk+pi` opt-in, and by the owner's decision
+their table and policy move to Rust.
 
 ### Extension memory ownership, 2026-11-06
 
@@ -352,25 +487,8 @@ The next source slice [releases failed-factory subscriptions and retired runtime
 references](extension-memory-lifecycle.md). Both manifest dialects retain their
 existing behavior, including custom-loader runtime reuse. Six initial regressions
 reproduced retained callbacks/listeners; the final focused suite passed 87 tests
-and the root compiler passed. The complete root check remains blocked by unrelated
-stale subscription-usage build outputs. This is a bounded lifecycle correction,
+and the root compiler passed. That run's root check was blocked by unrelated
+stale subscription-usage build outputs; the later 2026-11-08 recheck found those
+outputs absent and passed. This is a historical failure, not the current blocker. This is a bounded lifecycle correction,
 not a measured whole-process memory reduction or completion of artifact, native
 UI, independent R or Rust execution gates.
-
-### K0 Rust contracts, 2026-11-12
-
-Stage K0 of spec 120 is delivered on `2.0.0` (pull requests #417 and #418, head
-`3632e73ffa`). The `native/omk-contract` crate owns the session JSONL, public RPC
-and extension-host wire types and the `omk+pi` compatibility tables; the Node
-core's `pi-compat.ts` and the type-only declarations under
-`packages/protocol/src/generated/rust-contracts/` are generated from it, and a
-drift check fails on a hand edit. The capability matrix lists every user-visible
-feature and built-in extension with one disposition. `npm run check` now runs
-format, Clippy and tests for every crate under `native/`, and CI adds a cargo job
-and macOS and Windows jobs for the contract crate.
-
-Nothing in production calls the crate, so this moves no ownership. G0 with every
-default-on flag set to `0` is byte-identical to `48fb8e33a8`. Gate results,
-limits and open items are in
-[the Rust core plan](omk-2-rust-core.md#k0-status-2026-11-12). K1 waits for the
-owner's dependency review bundle (decision B1).

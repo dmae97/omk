@@ -23,5 +23,6 @@ pub mod json_parse;
 mod partial_json;
 mod reducer;
 mod request;
+mod request_history;
 mod sse;
 pub mod transport;

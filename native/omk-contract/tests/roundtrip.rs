@@ -43,15 +43,24 @@ fn session_g0_jsonl_roundtrips_every_record_byte_for_byte() {
                 messages += 1;
                 assert!(matches!(message, SessionMessage::Known(_)));
             }
-            FileEntry::Custom { .. } => custom += 1,
+            FileEntry::Custom { custom_type, .. } => {
+                assert_ne!(custom_type, "skill_admission_turn");
+                custom += 1;
+            }
             other => panic!("unexpected G0 entry: {other:?}"),
         }
         encoded.push_str(&serde_json::to_string(&parsed).unwrap());
         encoded.push('\n');
     }
-    // Five custom entries since #418 stopped writing skill_admission_turn for prompts that admit no skill.
+    // Spec 120 decision I1: only four empty admission markers were removed.
     assert_eq!((headers, messages, custom), (1, 14, 5));
     assert_eq!(encoded.as_bytes(), source.as_bytes());
+}
+
+#[test]
+fn session_legacy_skill_admission_marker_remains_readable() {
+    let line = r#"{"type":"custom","id":"legacy","parentId":null,"timestamp":"2026-10-24T00:00:00.000Z","customType":"skill_admission_turn","data":{"schemaVersion":1}}"#;
+    assert_roundtrip(line);
 }
 
 #[test]

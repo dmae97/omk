@@ -1,6 +1,8 @@
 # Spec 120 — Rust core through the headless candidate (K0 to K5)
 
-Status: Draft. Part of the 2.0.0 plan.
+Status: K0 locally accepted under decision I1 on 2026-11-12; the first K1 unit is
+in progress in another lane, not accepted. K2 to K5 remain planned.
+Part of the 2.0.0 plan. This is not overall CI or release acceptance.
 Base: branch `2.0.0`, `48fb8e33a8`, plus the uncommitted work recorded in `.planning/STATE.md`.
 Scope of this file: spec only; no code, no dependency, no CHANGELOG, no version change.
 Decisions: [`decisions.md`](decisions.md). K0 work: [`plan.md`](plan.md), [`tasks.md`](tasks.md).
@@ -9,16 +11,18 @@ Related: [spec 108](../108-pi-decoupling/spec.md) (Pi decoupling), [spec 109](..
 
 ## 1. Problem
 
-- The core is TypeScript on Node: 234,804 raw source lines across seven packages. Rust is
-  four crates under `native/`, 4,022 lines including tests, and only `omk-execution` has a
-  production caller.
+- At the 2026-11-10 base, the core was 234,804 raw TypeScript source lines across seven
+  packages, and Rust was four crates under `native/`, 4,022 lines including tests. K0
+  subsequently added `omk-contract`; only `omk-execution` has a production runtime caller.
+  These sizes are the original baseline, not a current inventory.
 - The owner's 2026-11-10 direction is a Rust core with every Pi dependency replaced and
   existing extensions preserved.
 - Extensions are written against Node. 81 of 210 extension source files in this checkout
   import `node:` built-ins, and the documented contract promises npm dependencies and
   unrestricted built-ins.
-- There is no contract that says what a Rust core must reproduce, how an extension reaches
-  it, or what 2.0.0 contains.
+- At the base there was no Rust-core parity contract. This spec now defines the K5
+  scope, and K0 supplies types and fixtures; the Rust runtime and host transport remain
+  unimplemented.
 
 ## 2. Decisions this spec builds on
 
@@ -68,8 +72,12 @@ K3 and K4 are independent of each other after K2.
 
 ## 5. Extension host
 
-- The Rust core is the single writer for sessions, grants, budgets and settlement. The host
-  holds no durable state.
+- The Rust core is the single writer for the state of each boundary it owns, including
+  sessions and its agent-loop budgets. This does not move the Node verified-run grant
+  ledger, scheduler or settlement into K5; they remain K7 work (§6, §12). Unsupported
+  subsystems are refused under CM1 rather than acquiring a second authority owner.
+  The host holds only a replica of core state, not a second durable core ledger. Extensions
+  retain their documented Node file/network capabilities; this is not an OS sandbox.
 - The core starts the host as a child process over private stdio. Frames are bounded and
   versioned. A version the core does not support fails closed before any extension loads.
 - The host runs the existing module loading and `ExtensionAPI` on Node `>=22.19.0`, the
@@ -140,7 +148,7 @@ error, fails the K5 gate.
 
 | Gate | Stage | Check |
 | --- | --- | --- |
-| G0 | all | Rust core not selected: `test/suite/g0-session-hash.ts` and existing suites unchanged against the base |
+| G0 | all | Rust core not selected: `test/suite/g0-session-hash.ts` and existing suites unchanged against the base, except owner-approved I1's four empty skill-marker removals. K0 uses the reviewed corpus in `g0-baseline-review.md`; new drift still fails |
 | RC1 | K0 | Recorded sessions and RPC transcripts decode and re-encode byte-identically. Regenerating the TypeScript declarations produces no diff; a hand edit fails the check |
 | RC2 | K1 | For each provider, request bodies and headers equal fixtures recorded from the TypeScript implementation. The gate makes no network call. Live-credential checks stay opt-in |
 | RC3 | K2 | On the offline faux provider corpus, session entries and tool-call order from the Rust core equal the Node core's. Crash and resume at real entry points lose no committed entry and duplicate none |
@@ -163,6 +171,8 @@ error, fails the K5 gate.
 Rules for the gates:
 
 - Never regenerate a golden fixture or widen a tolerance to make a port pass.
+  Decision I1 is a scoped, owner-approved Node behavior-baseline update, not a
+  port exception. Its exact delta and old/new digests are in `g0-baseline-review.md`.
 - A skipped case is not a pass. Gates that need a tool that is missing fail.
 - Fixtures contain no credentials, private prompts or absolute user paths.
 
@@ -207,9 +217,11 @@ Consequences:
   and process-tree termination are tested per platform, not assumed.
 - Clipboard replacement (§9) covers the same six targets the current dependency ships:
   darwin arm64 and x64, linux arm64 and x64 (gnu), win32 arm64 and x64.
-- All CI jobs currently run on Ubuntu runners, and none runs cargo. Decisions C3 to C7 add
-  a macOS job, a Windows job and a cargo job, and build releases natively on those runners.
-  No other workflow edit is covered. A run that did not happen is reported as missing.
+- At the base, CI ran only on Ubuntu with no cargo job. T011 added `cargo` on Ubuntu,
+  `rust-macos` on macOS and `rust-windows` on Windows under C3 to C7; their historical K0
+  results are recorded in `tasks.md`. They do not build a K5 runtime or six release assets.
+  Native release builds and current candidate acceptance are still required. No other
+  workflow edit is covered. A run that did not happen is reported as missing.
 
 ## 9. Pi-zero
 
@@ -225,9 +237,11 @@ Required for 2.0.0 on both cores:
   child processes (`PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`,
   `PI_REASONING_LEVEL`, with inherited values deleted first) and one is read
   (`PI_CLIPBOARD_OSC52`). The other three are two strings in a doctor detection pattern and
-  one code constant. No `OMK_*` equivalent is exported today. Decision G2: the five exported
-  names gain `OMK_*` counterparts and keep their `PI_*` names. The existing removal of
-  inherited values applies to both sets.
+  one code constant. Decision G2 gives the five exported names `OMK_*` counterparts
+  and keeps their `PI_*` names. The Node bash source now implements this per command,
+  stripping inherited values from both sets even when exposure/context is absent.
+  This is not installed-engine or Rust/platform acceptance; all remaining PZ1 checks
+  still apply.
 - `LICENSE` and `NOTICE` keep the original Pi copyright. A Rust port of MIT code is still
   derived work.
 
@@ -237,9 +251,11 @@ Required for 2.0.0 on both cores:
   them. If declaration generation needs another crate, that crate goes through review
   first; otherwise the generator is written in the repository.
 - K1 cannot start inside that limit. Decisions B2 to B4 select `tokio`, `reqwest` and
-  `rustls` as candidates. None enters a lockfile until the owner approves its review bundle
-  (B1). Versions and licenses checked on 2026-11-10 are in `harness-survey-2026-11.md` next
-  to the plan.
+  `rustls` as candidates. Production manifests/lockfiles and compilation require the
+  owner's final review-bundle approval (B1). J1 separately permits temporary resolution-only
+  manifests/lockfiles and metadata/source review, not compilation or incorporation.
+  Current proposed pins and graph findings are in `k1-dependency-review.md`; the older
+  survey is historical, not dependency approval.
 - Code copied from another project must be MIT or Apache-2.0, with the source named at the
   top of the file and `NOTICE` updated for Apache-2.0.
 
@@ -272,8 +288,19 @@ Required for 2.0.0 on both cores:
 The owner decisions this section listed are closed in [`decisions.md`](decisions.md). What
 remains:
 
-- The B1 review bundle for K1. It needs the owner's approval before any crate is added.
+- Validate K1 against the exact B1 review and scoped `k1-adoption.json` record in its
+  existing lane. Adoption of the first Anthropic unit does not approve a changed graph
+  or complete provider parity/platform acceptance.
 - The WC1 threshold, set from the K4 measurement.
+- Complete K4 call/result and hosted tool/provider callback frames. K0 has no transport;
+  `ApiCall` alone cannot return an API result. Define replica reads following writes inside
+  one handler, and test ordering/cancellation before extending the versioned wire.
+- Resolve UI-dependent EH1 corpus cases by K6 implementation or F2's named owner exception;
+  a CM1 refusal alone is not extension conformance. Do not drop those cases.
+- G1's separate clipboard dependency review and six-target addon delivery for Node Pi-zero.
+- Correct/test the inventory catch-all's script-literal classification before using the
+  PZ1 zero-src count. Test fixture literals are not runtime imports; runtime imports must
+  not be hidden. PZ1 remains required.
 - The macOS and Windows equivalents of the binary pin, defined before K5.
 - How spec 109 changes when the distributed binary is Rust and the Node host is a
   separate artifact.

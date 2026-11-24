@@ -1,0 +1,27 @@
+{
+  "schema": "omk.adaptorch.dispatch.v1",
+  "task": "Fix the off-by-one in pagination cursor handling and add a regression test.",
+  "profile": {
+    "task_type": "coding",
+    "difficulty": 0.6,
+    "issue_terms": [
+      "pagination",
+      "cursor"
+    ]
+  },
+  "budget": {
+    "max_cost": 6.0
+  },
+  "templates": [
+    {"name": "omk_patch_anchor", "roles": ["strong_patcher"], "cost": 1.0, "expected_success": 0.5, "apply_probability": 0.6, "regression_risk": 0.05, "diversity_potential": 0.0, "always_include": true},
+    {"name": "omk_explore_then_patch", "roles": ["locator", "strong_patcher"], "cost": 1.5, "expected_success": 0.52, "apply_probability": 0.64, "regression_risk": 0.06, "diversity_potential": 0.8},
+    {"name": "omk_patch_review_repair", "roles": ["patcher", "cross_reviewer", "apply_repairer"], "cost": 2.0, "expected_success": 0.62, "apply_probability": 0.92, "regression_risk": 0.03, "diversity_potential": 0.4},
+    {"name": "omk_select_then_rewrite", "roles": ["selector", "strong_rewriter"], "cost": 1.3, "expected_success": 0.55, "apply_probability": 0.7, "regression_risk": 0.35, "diversity_potential": 0.6}
+  ],
+  "scheduling": {
+    "max_workers": 3,
+    "max_in_flight_tokens": 3000,
+    "priority": "critical_path",
+    "timeout_s": 1800
+  }
+}

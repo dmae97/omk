@@ -117,6 +117,7 @@ using one as a statement about the present runtime.
 | 118 | [Evidence delete-after-use](118-evidence-delete/spec.md) |
 | 119 | [Goal autonomy](119-goal-autonomy/spec.md) |
 | 120 | [Rust core through the headless candidate](120-rust-core/spec.md) |
+| 121 | [Evidence-driven harness improvements](121-evidence-driven-harness/spec.md) |
 
 Additional records:
 
@@ -142,6 +143,11 @@ Spec 015 is the entry point for algorithm maturity and direction. The current
 verification baseline is [Harness quality review, 2026-10-30](../packages/coding-agent/docs/harness-improvements.md).
 Separate delivery, activation, and evidence labels prevent an internal mechanism or
 passing local test from being mistaken for a shipped live path.
+
+The 2026-11-12 follow-up is spec 121 and the research/roadmap documents
+`packages/coding-agent/docs/harness-research-2026-11.md` and
+`packages/coding-agent/docs/harness-roadmap-2026-11.md`. K0's local closure uses the
+explicit spec 120 I1 baseline decision; it does not certify K5 or a release.
 
 Historical `plan.md` and `tasks.md` files remain evidence of their original cycle.
 Do not reopen them merely because a checkbox is blank; create or update a current

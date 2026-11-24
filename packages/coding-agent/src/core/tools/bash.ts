@@ -52,7 +52,7 @@ export interface BashSpawnContext {
 
 export type BashSpawnHook = (context: BashSpawnContext) => BashSpawnContext;
 
-const SESSION_ENV_KEYS = ["PI_SESSION_ID", "PI_SESSION_FILE", "PI_PROVIDER", "PI_MODEL", "PI_REASONING_LEVEL"] as const;
+const SESSION_ENV_KEYS = ["SESSION_ID", "SESSION_FILE", "PROVIDER", "MODEL", "REASONING_LEVEL"] as const;
 
 function resolveSpawnContext(
 	command: string,
@@ -62,18 +62,26 @@ function resolveSpawnContext(
 	ctx: ExtensionContext | undefined,
 ): BashSpawnContext {
 	const env = { ...getShellEnv() };
-	// Anti-spoof: never inherit PI_* session metadata from the parent environment.
-	for (const key of SESSION_ENV_KEYS) delete env[key];
+	// Anti-spoof: strip both metadata namespaces even when exposure is disabled.
+	for (const key of SESSION_ENV_KEYS) {
+		delete env[`OMK_${key}`];
+		delete env[`PI_${key}`];
+	}
 	if (exposeSessionEnvironment && ctx?.sessionManager) {
 		const model = ctx.model;
-		env.PI_SESSION_ID = ctx.sessionManager.getSessionId();
-		const sessionFile = ctx.sessionManager.getSessionFile();
-		if (sessionFile) env.PI_SESSION_FILE = sessionFile;
-		if (model) {
-			env.PI_PROVIDER = model.provider;
-			env.PI_MODEL = model.id;
+		const metadata = {
+			SESSION_ID: ctx.sessionManager.getSessionId(),
+			SESSION_FILE: ctx.sessionManager.getSessionFile() || undefined,
+			PROVIDER: model?.provider,
+			MODEL: model?.id,
+			REASONING_LEVEL: ctx.thinkingLevel || undefined,
+		};
+		for (const key of SESSION_ENV_KEYS) {
+			const value = metadata[key];
+			if (value === undefined) continue;
+			env[`OMK_${key}`] = value;
+			env[`PI_${key}`] = value;
 		}
-		if (ctx.thinkingLevel) env.PI_REASONING_LEVEL = ctx.thinkingLevel;
 	}
 	const baseContext: BashSpawnContext = { command, cwd, env };
 	return spawnHook ? spawnHook(baseContext) : baseContext;
@@ -86,7 +94,7 @@ export interface BashToolOptions {
 	commandPrefix?: string;
 	/** Optional explicit shell path from settings */
 	shellPath?: string;
-	/** Expose current session metadata as PI_* environment variables. Default: true */
+	/** Expose current session metadata as OMK_* and legacy PI_* environment variables. Default: true */
 	exposeSessionEnvironment?: boolean;
 	/** Trusted sandbox policy for local shell execution */
 	sandboxPolicy?: BashSandboxPreflight;

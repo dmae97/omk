@@ -96,7 +96,12 @@ export function formatDurableGoalCheckpoint(goal: DurableGoalSnapshot): string {
 	return [
 		`Goal: ${goal.objective}`,
 		section("Core", checkpoint.core),
-		section("Verified", checkpoint.verifiedEvidenceIds),
+		section(
+			checkpoint.goalGeneration === computeDurableGoalGeneration(goal)
+				? "Verified"
+				: "Historical evidence (reverify)",
+			checkpoint.verifiedEvidenceIds,
+		),
 		section("Open", checkpoint.open),
 		`Next: ${checkpoint.next}`,
 	].join("\n");

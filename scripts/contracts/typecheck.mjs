@@ -73,6 +73,8 @@ export function checkDeclarationTypes(artifacts) {
 		add("ui.RpcUiResponse", { type: "extension_ui_response", id: "ui", value: "" });
 		add("ui.RpcUiResponse", { type: "extension_ui_response", id: "ui", cancelled: true });
 		const base = { id: "e", parentId: null, timestamp: "iso" };
+		// Decision I1 removes empty markers from new recordings, not from the wire contract.
+		add("session.FileEntry", { ...base, type: "custom", customType: "skill_admission_turn", data: { schemaVersion: 1 } });
 		for (const value of [
 			{ type: "thinking_level_change", thinkingLevel: "off" },
 			{ type: "model_change", provider: "faux", modelId: "m" },

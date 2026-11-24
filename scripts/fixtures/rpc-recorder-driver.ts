@@ -45,7 +45,7 @@ syncBuiltinESMExports();
 Object.defineProperty(globalThis.crypto, "randomUUID", { value: fixedUuid, configurable: true });
 
 const packageRoot = resolve(import.meta.dirname, "../..");
-process.env.OMK_PACKAGE_DIR = resolve(packageRoot, "packages/coding-agent");
+process.env.OMK_PACKAGE_DIR ??= resolve(packageRoot, "packages/coding-agent");
 process.env.OMK_BASH_SANDBOX = "off";
 
 const { fauxAssistantMessage } = await import("omk-ai");

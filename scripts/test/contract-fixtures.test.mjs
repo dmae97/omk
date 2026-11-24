@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { inventory, normalizeJsonl, parseJson, privacyScan, validateManifest } from "../fixtures/contract-fixture-utils.mjs";
+import { createRecordingWorkDir, inventory, normalizeJsonl, parseJson, privacyScan, validateManifest } from "../fixtures/contract-fixture-utils.mjs";
 import { recordRpc } from "../fixtures/contract-rpc-recording.mjs";
 
 const fixtures = fileURLToPath(new URL("../../native/omk-contract/tests/fixtures/", import.meta.url));
 const rows = () => readFileSync(join(fixtures, "rpc-transcript.jsonl"), "utf8").trimEnd().split("\n").map(parseJson);
+
+test("the repository check compares fresh contracts after native toolchain setup", () => {
+	const { scripts } = parseJson(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+	assert.equal(scripts["check:contracts"], "node scripts/check-contract-drift.mjs && node scripts/check-capability-matrix.mjs && node scripts/record-contract-fixtures.mjs --check");
+	const native = scripts.check.indexOf("npm run check:native");
+	const contracts = scripts.check.indexOf("npm run check:contracts");
+	assert.ok(native >= 0 && contracts > native);
+	assert.ok(contracts < scripts.check.indexOf("npm run check:constitution"));
+});
 
 test("RPC fixtures preserve numeric prompt_settled durationMs", () => {
 	const settled = rows().filter((row) => row.direction === "out").map((row) => row.message).filter((row) => row.type === "prompt_settled");
@@ -32,6 +42,10 @@ test("normalization changes typed durations without changing synthetic text", ()
 	assert.throws(() => normalizeJsonl('{"type":"prompt_settled","durationMs":"<ms>"}', []), /durationMs/);
 	assert.throws(() => normalizeJsonl('{"type":"prompt_settled","durationMs":-1}', []), /durationMs/);
 	assert.throws(() => normalizeJsonl('{', []), /invalid fixture JSON/);
+	const observed = { systemPrompt: "docs /synthetic/package", systemPromptCacheBoundary: 2372, usage: { input: 1236, totalTokens: 1255 } };
+	assert.deepEqual(parseJson(normalizeJsonl(JSON.stringify(observed), [["/synthetic/package", "<pkg>"]])), {
+		...observed, systemPrompt: "docs <pkg>",
+	}, "path normalization must not rewrite observed cache offsets or token usage");
 });
 
 test("manifest rejects changed hashes, missing files, unexpected files and duplicate paths", () => {
@@ -102,4 +116,48 @@ test("successful transcript distinguishes directions and drains UTF-8 before clo
 
 test("nonzero exit invalidates an otherwise complete transcript", async () => {
 	await assert.rejects(recordRpc(process.execPath, ["-e", successfulDriver + "\nlines.on('close',()=>process.exit(7));"], { timeoutMs: 2000 }), /unsuccessfully/);
+});
+
+test("recording paths preserve the reviewed input widths and reject roots that cannot fit", () => {
+	const parent = mkdtempSync(join(tmpdir(), "c0-"));
+	try {
+		for (const root of [parent, join(parent, "nested")]) {
+			mkdirSync(root, { recursive: true });
+			const work = createRecordingWorkDir(root);
+			assert.equal(work.length, 45);
+			assert.equal(join(work, "tmp").length, 49);
+			assert.equal(join(work, "tmp", "omk-g0-123456", "pkg").length, 67);
+			assert.equal(work.startsWith(root), true);
+			rmSync(work, { recursive: true });
+			const rpcWork = createRecordingWorkDir(root, 44);
+			assert.equal(join(rpcWork, "p").length, 46);
+			assert.equal(rpcWork.startsWith(root), true);
+			rmSync(rpcWork, { recursive: true });
+		}
+		const before = readdirSync(parent);
+		assert.throws(() => createRecordingWorkDir(join(parent, "x".repeat(50))), /shorter absolute temporary root/);
+		assert.throws(() => createRecordingWorkDir("relative"), /shorter absolute temporary root/);
+		assert.deepEqual(readdirSync(parent), before, "invalid roots must fail before creating a directory");
+	} finally { rmSync(parent, { recursive: true, force: true }); }
+});
+
+test("fresh contract recordings match unchanged goldens across temporary-root lengths", { timeout: 180_000 }, () => {
+	const parent = mkdtempSync(join(tmpdir(), "c0-"));
+	const before = { files: inventory(fixtures), manifest: readFileSync(join(fixtures, "manifest.json"), "utf8") };
+	try {
+		for (const root of [parent, join(parent, "nested")]) {
+			mkdirSync(root, { recursive: true });
+			const env = { HOME: join(parent, "home"), TMPDIR: root, TEMP: root, TMP: root };
+			for (const key of ["PATH", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT"]) if (process.env[key]) env[key] = process.env[key];
+			const result = spawnSync(process.execPath, ["scripts/record-contract-fixtures.mjs", "--check"], {
+				cwd: new URL("../../", import.meta.url), env, encoding: "utf8", timeout: 80_000, maxBuffer: 16 * 1024 * 1024,
+			});
+			assert.equal(result.status, 0, result.stdout + result.stderr);
+			assert.match(result.stdout, /10 fixtures match a fresh recording/);
+		}
+	} finally {
+		rmSync(parent, { recursive: true, force: true });
+		assert.deepEqual(inventory(fixtures), before.files, "recording checks must not rewrite goldens");
+		assert.equal(readFileSync(join(fixtures, "manifest.json"), "utf8"), before.manifest);
+	}
 });

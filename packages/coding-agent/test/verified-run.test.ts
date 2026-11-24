@@ -140,6 +140,8 @@ describe("verified-run command profile", () => {
 			application: "not_requested",
 			failure: "scope_changed",
 		});
+		expect(readFileSync(join(workspace, "input.txt"), "utf8")).toBe("original");
+		expect(readdirSync(workspace)).toEqual(["input.txt"]);
 	});
 
 	it("does not accept model-like verified text instead of a passing protected check", async () => {

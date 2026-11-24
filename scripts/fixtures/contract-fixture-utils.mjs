@@ -1,8 +1,20 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, lstatSync } from "node:fs";
+import { readFileSync, readdirSync, lstatSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
 
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+// The reviewed K0 inputs used a 45-code-unit work path (49 with /tmp, 67 with
+// /tmp/omk-g0-XXXXXX/pkg). Freeze the input shape, not usage or cache offsets:
+// those are calculated before path normalization and must remain real observations.
+export function createRecordingWorkDir(root = tmpdir(), width = 45) {
+	const prefixLength = width - (join(root, "x").length - 1) - 6;
+	if (!isAbsolute(root) || prefixLength < 3)
+		throw new Error(`K0 recording requires a shorter absolute temporary root: set TMPDIR/TEMP/TMP so a ${width}-character work path fits`);
+	const prefix = "omk-contract-fixtures-".slice(0, prefixLength).padEnd(prefixLength, "_");
+	return mkdtempSync(join(root, prefix));
+}
 
 export function parseJson(text) {
 	try {

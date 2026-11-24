@@ -4,7 +4,7 @@ OMK uses environment variables in three ways:
 
 - Variables such as `OMK_OFFLINE` configure the OMK process.
 - OMK sets `OMK_CODING_AGENT` so child processes can detect that they run inside OMK.
-- Commands run by the LLM-callable bash tool receive `PI_*` variables describing the current session.
+- Commands run by the LLM-callable bash tool receive `OMK_*` session variables and matching legacy `PI_*` aliases.
 
 Provider API-key variables are documented separately in [Providers](providers.md). `XAI_API_KEY` is an xAI Platform API-billing credential; it is not the OAuth credential created by `/login` and cannot populate weekly SuperGrok usage/reset.
 
@@ -14,32 +14,38 @@ The CLI and RPC entry points set `OMK_CODING_AGENT=true`. Child processes inheri
 
 ## Bash Tool Session Environment
 
-Commands run by the bash tool receive the current session state (the `PI_*` names are kept for upstream Pi compatibility):
+Commands run by the bash tool receive the current session state. The `OMK_*`
+names and their legacy `PI_*` aliases carry identical values; the aliases remain
+for existing scripts and extensions.
 
-| Variable | Description |
-| --- | --- |
-| `PI_SESSION_ID` | Current session ID |
-| `PI_SESSION_FILE` | Absolute path to the current session JSONL file; unset for ephemeral sessions |
-| `PI_PROVIDER` | Currently selected model provider |
-| `PI_MODEL` | Currently selected model ID |
-| `PI_REASONING_LEVEL` | Current effective reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra` |
+| Variable | Compatibility alias | Description |
+| --- | --- | --- |
+| `OMK_SESSION_ID` | `PI_SESSION_ID` | Current session ID |
+| `OMK_SESSION_FILE` | `PI_SESSION_FILE` | Absolute path to the current session JSONL file; unset for ephemeral sessions |
+| `OMK_PROVIDER` | `PI_PROVIDER` | Currently selected model provider |
+| `OMK_MODEL` | `PI_MODEL` | Currently selected model ID |
+| `OMK_REASONING_LEVEL` | `PI_REASONING_LEVEL` | Current effective reasoning level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra` |
 
-The values are resolved when each command starts. Switching models or changing the reasoning level therefore affects the next bash command without restarting OMK. `PI_PROVIDER` and `PI_MODEL` identify the selected OMK model, not a different upstream model that a router may choose internally.
+The values are resolved when each command starts. Switching models or changing the reasoning level therefore affects the next bash command without restarting OMK. `OMK_PROVIDER` and `OMK_MODEL` (and their `PI_*` aliases) identify the selected OMK model, not a different upstream model that a router may choose internally.
 
-Inherited parent-process values for these variables are always stripped first, so a nested OMK session never exposes stale parent-session metadata.
+Inherited parent-process values for all ten variables are stripped before
+injection, including when exposure is disabled or no session context exists.
+Missing session-file/model/reasoning metadata is omitted in both namespaces,
+not inherited from a parent. These values are informational, not authentication
+or approval evidence.
 
 When asked which model or provider is running, inspect these variables instead of inferring the answer from the system prompt:
 
 ```bash
-printf '%s/%s\n' "$PI_PROVIDER" "$PI_MODEL"
-printf 'reasoning=%s session=%s\n' "$PI_REASONING_LEVEL" "$PI_SESSION_ID"
+printf '%s/%s\n' "$OMK_PROVIDER" "$OMK_MODEL"
+printf 'reasoning=%s session=%s\n' "$OMK_REASONING_LEVEL" "$OMK_SESSION_ID"
 ```
 
 The session file can be inspected directly when the session is persistent:
 
 ```bash
-if [ -n "$PI_SESSION_FILE" ]; then
-  tail -n 1 "$PI_SESSION_FILE"
+if [ -n "$OMK_SESSION_FILE" ]; then
+  tail -n 1 "$OMK_SESSION_FILE"
 fi
 ```
 
@@ -47,7 +53,9 @@ These variables are injected into the LLM-callable bash tool. They are not injec
 
 ### Custom Bash Tools
 
-Bash tools created with `createBashTool()` expose the session environment by default. Injection happens before `spawnHook`, so a hook receives the variables in `ctx.env`:
+Bash tools created with `createBashTool()` expose both namespaces by default.
+Injection happens before `spawnHook`, so a trusted hook receives the variables in
+`ctx.env` and may deliberately change them; they are not a security credential:
 
 ```typescript
 const bashTool = createBashTool(cwd, {

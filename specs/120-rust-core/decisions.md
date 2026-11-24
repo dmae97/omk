@@ -106,6 +106,26 @@ acceptance in spec 120.
 | H1 | Committing this session's documents | Commit the new files and the one-line `specs/README.md` row. Files that also hold other sessions' uncommitted changes stay uncommitted |
 | H2 | Features from the harness survey | None approved. The survey failed its audit: no metric, baseline or threshold. Each feature needs its own spec |
 
+## I. G0 baseline disposition, 2026-11-12
+
+| ID | Decision | Chosen |
+| --- | --- | --- |
+| I1 | Retain empty skill-marker suppression and refresh its G0 fixture | **Owner-approved rule exception.** The owner explicitly requested keeping the existing marker-removal behavior, recording the G0 baseline change, reviewing and updating related fixtures, then re-verifying T012. Preserve `8560a93285`; do not restore unconditional markers. |
+
+I1 supersedes only the unchanged-session-byte requirement for the four empty
+`skill_admission_turn` entries in the old K0 G0 recording and their consequent
+entry IDs/parent links. The original behavior baseline remains `48fb8e33a8`;
+the old fixture origin remains `437ae8fdf7` in Git history. The new baseline is
+source `3045c4ca2f`, with the exact recorder input digest and fixture digests in
+`native/omk-contract/tests/fixtures/manifest.json` after review. The before/after
+review is recorded in `g0-baseline-review.md` in this directory.
+
+Provider request bytes, RPC transcript bytes, all seven archived session goldens,
+message content/order, non-marker custom data and round-trip strictness must not
+change under this exception. Existing sessions containing markers must remain
+decodable. Fixture normalization must not be broadened. This is not a general
+permission to regenerate failing goldens or a waiver of any other K0/K5 gate.
+
 ## J. K1 resolution-only review, 2026-11-12
 
 | ID | Decision | Chosen |

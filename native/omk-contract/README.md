@@ -33,10 +33,11 @@ The repository pins Rust 1.99.0 in the root `rust-toolchain.toml`.
 
 ## Status
 
-Stage K0 units T001 to T009 are complete: toolchain, crate skeleton,
+Stage K0 units T001 to T012 are locally complete under decision I1: toolchain, crate skeleton,
 compatibility tables and their generated Node copy, synthetic fixtures,
 session/public RPC contracts, extension-host wire types and their TypeScript
-declarations. K0 as a whole is not complete.
+declarations, capability matrix, native checks and the approved G0 baseline
+refresh. Fresh recording now matches the reviewed corpus. See [K0 verification](../../packages/coding-agent/docs/omk-2-rust-core.md#k0-status-and-verification-2026-11-12).
 
 ### T004 compatibility table
 
@@ -78,6 +79,15 @@ node scripts/check-contract-drift.mjs         # read-only; fails on any differen
 records G0 and RPC and compares the seven copied session-equivalence goldens as
 archived synthetic records, not fresh behavior/parity evidence. It also checks
 manifest hashes and inventory; it does not overwrite the stored fixtures.
+The recorder freezes the reviewed input work-path width at 45 UTF-16 code units,
+so changing the temporary parent cannot change faux token estimates or cache
+boundaries before textual path normalization. It shortens/pads only the random
+work-directory prefix, never recorded numeric values. The RPC driver also uses a separate per-run package alias with the reviewed
+46-code-unit width instead of the checkout path. Both aliases point at the actual
+candidate files; no usage or cache values are rewritten. The selected temporary
+parent must be absolute and at most 34 code units long for both inputs to fit;
+otherwise recording fails with an instruction to set a shorter
+`TMPDIR`/`TEMP`/`TMP`. Native platform acceptance remains separate. See [the drift investigation](../../specs/120-rust-core/k0-fixture-drift.md).
 
 ### T006 session contract
 
@@ -90,8 +100,8 @@ manifest hashes and inventory; it does not overwrite the stored fixtures.
   the compact G0 JSONL's field order, nested payloads, numbers and escapes intact.
   Use `into_entry()` then `from_entry()` to change typed data; new records use
   serde field order. Arbitrary outer whitespace is not a byte-preservation promise.
-- Tests compare all 20 G0 records and the complete JSONL byte for byte (24 until
-  the T012 re-recording; #418 dropped four empty `skill_admission_turn` markers). Six
+- Tests compare all 20 I1-approved G0 records and the complete JSONL byte for byte.
+  A separate legacy-marker test preserves decoding of old sessions. Six
   archived scenarios contribute 22 `trace.entries`: tests explicitly replace
   numeric message timestamp sentinel `<T>` with `0` in memory, then check compact
   typed projections. The seventh golden is metrics-only and has no session entries.
@@ -119,6 +129,8 @@ manifest hashes and inventory; it does not overwrite the stored fixtures.
   its existing API and behavior; all eight T006 tests remain unchanged and pass.
 
 No session migration, persistence, recovery, RPC transport or production caller
-is added. CI integration remains a separate task. Native
-macOS/Windows acceptance remains unverified. Remaining tasks are in
-`specs/120-rust-core/tasks.md`.
+is added. T011 integrated CI: the contract crate passed on Linux, macOS and
+Windows at `09b6389aac` in run 42988270672. This is K0 crate evidence, not
+headless-core platform acceptance; the overall CI run failed. I1's updated fixture
+and legacy-marker test were subsequently checked locally on Linux only. Remaining tasks
+are in `specs/120-rust-core/tasks.md`.

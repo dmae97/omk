@@ -58,6 +58,19 @@ no observations. The probe refuses more than 4096 observations or 8 MiB of argum
 JSON snapshots rather than retaining unbounded quadratic history. These limits do
 not apply to default replay. See [the JSON unit record](../../specs/120-rust-core/k1-json-parity.md).
 
+## Text-only conversation history
+
+The optional request `history` array accepts `{role: "user" | "assistant", text}`
+before the existing final `user` string. Twelve independently recorded Node/SDK
+requests cover multi-turn text, Unicode, blank filtering and exact serialized
+body bytes through the Rust library and executable. Unsupported roles or fields
+are refused. This does not add tool-result, image, thinking, cross-provider or
+live-dispatch support. See [the text-history unit](../../specs/120-rust-core/k1-text-history.md).
+
+`node scripts/record-anthropic-history-fixtures.mjs --check` checks this separate
+oracle without changing either existing provider corpus. Its script regression
+is included by the repository's normal script-test discovery.
+
 ## Checks
 
 From the repository root, with a credential-free build environment:

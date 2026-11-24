@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v2.0.0
 milestone_name: Pi-independent OMK
-current_phase: 02
-current_phase_name: Native extensions and explicit migration
-current_plan: "02-06 artifact acceptance"
+current_phase: 07
+current_phase_name: Rust core through headless candidate
+current_plan: "Post-K0: K1 validation and independent Pi-zero units"
 status: blocked
-last_updated: "2026-11-10T00:19:00Z"
-state_head: 48fb8e33a84d01fde163091ed36a8bca981d3bbe
+last_updated: "2026-11-12"
+state_head: 3045c4ca2f548865b4638759a4e253cd23333688
 progress:
-  total_phases: 6
+  total_phases: 8
   completed_phases: 1
   total_plans: 1
   completed_plans: 1
@@ -20,17 +20,18 @@ progress:
 ## Current position
 
 Milestone: v2.0.0 Pi-independent OMK
-Phase: 02 of 6 (Native extensions and explicit migration)
-Status: Native default `omk` implemented; combined verify passed for candidate `019d076c…`
-Current gate: owner confirmation of tokens-per-turn, clipboard classification and the one-module-per-PR split before checking off Phase 2.
-User-directed implementation lane: Rust H1/H2a/H2b, H2c writer reconnect, H2d same-execution verifier/receipt continuation and H2e recovery-preserving native-record GC are verified bounded slices; broader ownership migration remains open. Package changes require fresh artifact receipts before activation.
+Phase: 07 of 8 (Rust core through headless candidate); Phase 2 closure remains open.
+Status: K0/T012 locally complete with I1 baseline review, not K5 or overall CI acceptance.
+Current gate: current-candidate K1 graph/build/replay validation in its existing lane. That lane now records scoped B1 adoption in `specs/120-rust-core/k1-adoption.json`; the earlier pending review header must not be treated as current acceptance. The shared root check encountered a missing offline `core-foundation 0.10.1` archive in its new graph check. No dependency/cache/checker change was made by this lane. G1 clipboard review/delivery remains independent Pi-zero work. G2 bash session aliases are now implemented in Node source with focused regression evidence, not installed/Rust/platform acceptance.
+Phase 2: `omk` native default is implemented. Candidate `019d076c…` has historical 2026-11-08 combined acceptance, not current-source receipts. D5a waived tokens-per-turn; G1 selected clipboard replacement subject to B1; D5b retains module-sized change splitting. Fresh receipts and activation evidence remain required.
+Rust H1–H2i are bounded Linux supervision/recovery slices. Full grant-ledger/scheduler ownership is deferred to K7, after 2.0.0; it is not the next release-blocking task. Plan counters in the metadata retain the earlier Phase 1 summary; K0's twelve tasks are tracked in spec 120, not inferred from those counters. Shared `state.json` is not rewritten by this documentation lane.
 
 ## Decisions
 
 - Preserve existing spec-kit governance; use GSD for execution/state tracking.
 - Do not equate absence of Pi npm packages with absence of compatibility coupling.
 - Start with the smallest end-to-end boundary slice and RED/GREEN evidence.
-- Keep versions at 1.5.10 until full milestone release acceptance.
+- Do not bump to the 2.0.0 milestone before acceptance. The current source is 1.5.11; historical 1.5.10 receipts remain bound to their original candidate.
 - GSD defaults do not authorize commits, model overrides or publication.
 
 ## Historical Phase 1 evidence
@@ -59,7 +60,7 @@ User-directed implementation lane: Rust H1/H2a/H2b, H2c writer reconnect, H2d sa
 
 - `Rscript` is not on PATH, but an existing R 4.4.3 installation was found and explicitly used for H1 budget and TS/R/Rust DAG acceptance. Broader mathematical/recovery gates remain separate.
 - Windows blueprint is outside current accessible project files.
-- Native desktop/platform acceptance remains unrun. Packaged Node/Bun/installed declarations and combined source acceptance passed for candidate `019d076c…`, revalidated against the recorded checkout origin and current package fingerprint. The separate bounded native observation stream passed its own source/binary gates; this is not a desktop installer or window acceptance.
+- Native desktop/platform acceptance remains unrun. Packaged Node/Bun/installed declarations and combined source acceptance passed for candidate `019d076c…`, revalidated at the earlier checkpoint. Current package inputs have changed and need new receipts. The separate bounded native observation stream passed its own source/binary gates; this is not a desktop installer or window acceptance.
 - The earlier development snapshot is committed as `48fb8e33a8`. H1 now changes real native execution code and its broker integration; the earlier artifact-only continuation is historical. Shared dependencies and other worktrees remain untouched.
 
 ## Continuation, 2026-11-06
@@ -190,8 +191,69 @@ no plan or broad requirement was marked complete in this continuation.
 - Observed RED: ten authority assertions and four actual native/source-CLI reconnect failures. Final 16-file matrix: 102 passed, zero failures/skips. Final cleanup recheck: 42 passed. `npm run check`: exit 0, 588 script tests / 30 skips / 0 failures. LSP clean coverage remained unconfirmed; compiler passed.
 - Pstack's verifiable-unit and domain-model principles were applied directly. Unrelated inherited changes were hash-checked; only this run's abandoned terminal test fixture was removed. No provider call, delegation, version change, commit, push, installed-engine activation or release. Setup/umask/cwd failures and remaining limits are recorded in [H2g result](RUST-HOST-02G-RESULT.md).
 
+## Rust host H2h recoverable grant retention, 2026-11-10
+
+- Runtime authority compaction now preserves settled execution grants while run recovery is possible, unsettled/publication-open or undecidable. Grant retention and workspace GC share one recovery hold policy. Retained expired tombstones keep their original expiry/disposition; no token, budget or counter is renewed.
+- Removed duplicate GC policy, extracted authority compaction selection and shared native compaction test helpers. H2g's synthetic result-retention workaround is gone. Original writer/verifier grants recover across pre-candidate/pre-attestation and rewrite-crash windows.
+- Seven intended RED failures preceded the fix. Combined native/authority/reconnect/GC matrix passed 161 tests in 25 files without skips. Root check exit 0, 588 passed / 30 skipped / 0 failed. See [H2h result](RUST-HOST-02H-RESULT.md).
+
+## Rust host H2i original native phase caps, 2026-11-10
+
+- Production requests and durable native records carry the original boot-bound writer/verifier phase cap. Rust checks it before record creation/spawn, during supervision and after durable commit before code release. Parent loss cannot reset the cap. Reconnect/receipt continuation reject altered caps against the journal.
+- New wire-field/real-binary REDs were observed. Rust 16 tests, check, Clippy, fmt and isolated release build passed. Final post-review native recheck passed 26 tests in five files; independent base-R phase-clock oracle passed 14 fixed cases and rejected a changed verdict. Root check exit 0. LSP coverage remained incomplete; compiler checks passed.
+- Node still owns approval, grant issuance/revocation, scheduling, reconciliation and publication. No dependency/version change, provider call, delegation, commit, push, installed-engine activation or release. Evidence and limits are in [H2i result](RUST-HOST-02I-RESULT.md).
+
+## Owner direction and documentation refresh, 2026-11-10
+
+- Owner direction: replace every remaining Pi dependency, migrate the core to Rust, keep extensions. Recorded in PROJECT.md, ROADMAP.md (new Phases 7 and 8) and REQUIREMENTS.md (five new IDs). No existing phase, requirement or gate was renamed, checked off or weakened.
+- New docs: `packages/coding-agent/docs/omk-2-rust-core.md` (plan, stages K0 to K8, extension compatibility contract, open decisions) and `packages/coding-agent/docs/harness-survey-2026-11.md` (harness and crate survey with licenses). `omk-2-migration.md` gained the direction record, the H2a to H2i summary and the remaining Pi surface.
+- Measured, not estimated: 234,804 raw TypeScript source lines across seven packages against 4,022 Rust lines in four crates. Pi inventory passes with 9/74/14/4; one production `require` remains (`@mariozechner/clipboard`). 81 of 210 extension source files import `node:` built-ins, which is the basis for recommending an out-of-process extension host over an embedded engine.
+- This input bears on the Phase 2 clipboard classification question: the owner's direction is replacement. The gate itself is not closed by this note.
+- Documentation only. No source, test, dependency, version, index, commit, push or activation change. `state.json` was left as the last execution session wrote it.
+- Blocking Phase 7: the six open owner decisions in the plan, and a Rust-core spec.
+
+## Owner decisions and spec 120, 2026-11-10
+
+- Decided: 2.0.0 ships at K5. Extensions run on Node in a host process. The Rust terminal UI takes the look of the OpenTUI status panel header (`opentui-status-render.ts`: rounded surface box, label/value rows, `━`/`╌` meters), which is K6 and after 2.0.0.
+- Written: `specs/120-rust-core/spec.md` (K0 to K5, harness impact `preserve`, gates G0, RC1 to RC4, EH1 to EH5, CM1, RB1, PZ1, D1) and its row in `specs/README.md`. Plan, migration roadmap, ROADMAP, REQUIREMENTS and PROJECT updated to match. Phase 6 no longer depends on Phase 8.
+- Consequence recorded, not decided: Pi-zero now gates 2.0.0 on the Node core too, so the clipboard dependency must be replaced before K5. The U1 desktop and P0 platform rows were release gates before this decision and were not addressed by it.
+- `DESIGN.md` is unchanged. The header look reverses its square-hairline frame rule; that change belongs to the K6 spec.
+- Still open: `omk+pi` adapter, dependency policy for K1, platforms, U1/P0 gating, terminal UI engine.
+- Documentation and spec only. No source, test, dependency, version, index, commit, push or activation change.
+- Unblocked now: K0 (contract crate, capability matrix) inside the existing `serde`/`serde_json` limit. K1 waits for dependency review.
+
+## Adapter and platform decisions, 2026-11-10
+
+- Decided: the `omk+pi` adapter is kept as an explicit opt-in and moves entirely to Rust. The Rust core supports Linux, macOS and Windows in 2.0.0.
+- Spec 120 gained §5a (adapter), §8a (platforms) and gates PA1, PA2, PL1, PL2. Requirements V2-PICOMPAT-01 and V2-RUSTPLAT-01 added under Phase 7.
+- Reading of "fully Rust": all Pi-specific policy and data live in Rust. The import substitution itself runs in the host's resolver, as a generic specifier map, because a JavaScript import is resolved by the engine that runs it. Extension discovery and manifest resolution move forward into K4.
+- Observed platform baseline: Linux bubblewrap; macOS `sandbox-exec`; native Windows has no sandbox backend and refuses bash under `enforce` (`src/core/sandbox/backend.ts`). Verified-run is Linux-only. Every CI job runs on Ubuntu.
+- Recorded as parity, not decided further: native Windows keeps the refusal. A Windows sandbox backend would be an `advance` change under its own spec.
+- Still open: K1 dependency policy, native Windows sandbox, where macOS and Windows evidence comes from, U1 desktop gating, terminal UI engine.
+- Documentation and spec only. No source, test, dependency, version, workflow, index, commit, push or activation change.
+
+## Audit and decision register, 2026-11-10
+
+- Ran the metacognition auditor: spec 120, the plan and the migration roadmap returned `proceed`; the harness survey returned `hold` (its adoption list has no metric, baseline or threshold). No surveyed feature is approved for implementation.
+- Two errors in this session's own documents were found by checking source and corrected: `PI_*` environment variables are six, not nine; built-in extensions import core internals (`goal-controller.ts` 10, `finish-check.ts` 5, `command-safety-gate.ts` 2) and cannot be assumed hostable. Spec 120 now requires safety-enforcing built-ins to be ported before K5.
+- Found and not resolved: the migration roadmap sends the remaining execution-host slices to K7 (after 2.0.0) while ROADMAP Phase 6 still depends on Phase 5. Owner decision D4.
+- Remaining decisions were split into 41 items in four dependency stages and put to the owner. Nothing is approved until answered. K0 has not started.
+
+## Delegated decisions and K0 plan, 2026-11-10
+
+- The owner delegated all 41 decisions. The agent applied the recommendations it had already stated; `specs/120-rust-core/decisions.md` records each by ID, including two refinements (B1 per review bundle, H1 all new files plus the index row) and two rule changes that rest only on the delegation (C3 limited workflow edits, D5a waiver of the spec-108 tokens-per-turn criterion).
+- Release gating changed by D1 to D4: 2.0.0 depends on Phase 2, Phase 4 as limited, Phase 7 and Phase 6. Phases 3, 5 and 8 follow the release. No phase or requirement was checked off, renumbered or deleted.
+- Phase 2 gate inputs are now answered: tokens-per-turn waived (D5a), clipboard to be replaced by a native addon on `arboard` (G1, subject to B1), one-module-per-change kept and applied at commit (D5b). Phase 2 is still not checked off; closing it needs the split commits and the separate activation run.
+- Written: `specs/120-rust-core/plan.md` and `tasks.md` for K0 (T001 to T012, none started). Spec 120 cites the decision IDs and gained gate WC1.
+- Known obstacle for K0 T004: `packages/coding-agent/src/core/pi-compat.ts` holds another session's uncommitted changes.
+- Still needing the owner: the K1 dependency review bundle (B1) and the wire cost threshold (F5).
+- Next unit: K0 T001 and T002 (toolchain pin and crate skeleton).
+
 ## Next action
 
-Continue core ownership migration after the bounded writer/verifier reconnect and native-record GC boundary. Start/revocation provenance now survives compaction for retained grants. Retention of settled grants across recoverable crash windows is a separate next scope; completely dropped grants are not reconstructed. Native witness retention, orphan/legacy cleanup policy, DAG/scripted-agent/session reconnect and Rust grant-ledger/scheduler ownership remain separate work. Extend independent R checks when transferring scheduler/budget policies. H1/H2a/H2b/H2c/H2d/H2e are bounded slices, not the full host.
+1. Complete the existing K1 lane's frozen-graph/build/replay validation and reconcile its review/adoption status. The new adoption record is scoped to the first Anthropic unit, not all K1 or a changed graph. Keep the independent Node recorder separate from the Rust replay. K0 is locally complete; do not repeat it or relabel historical CI as current.
+2. Continue independent Pi-zero work after the source G2 aliases: G1's separate clipboard review/addon delivery and the inventory's script-fixture classification, without deleting rejection controls. G2 preserves `PI_*` compatibility and strips both inherited namespaces; it alone does not close PZ1.
+3. Define K4 call/result/callback and replica consistency semantics before transport implementation. Keep CM1 refusals and EH1 named exceptions distinct; unsupported UI is K6 work, not an uncounted conformance pass.
+4. At K5/Phase 6, join full Phase 2 closure, limited Phase 4 oracle gates, K0 to K5 parity and native platform/artifact/rollback acceptance. New candidate bytes need a fresh gate root, never relabeled receipts. No phase or release is closed here.
 
-The [Phase 2 artifact failures](phases/02-native-extensions-and-explicit-migration/02-ACCEPTANCE-20261108.md) are resolved. The native default was already switched and candidate `019d076c…` has combined acceptance; unresolved spec-108 criteria remain separate. Changed package inputs require a fresh gate root, not relabeled receipts. The new native consumer has separate evidence because native sources are outside that package gate. Desktop windows/authenticated transport, Rust durable records/reconciliation, platform acceptance and milestone release remain open; phase 2 and the 2.0 milestone are not complete.
+Native authorization revocation, grant-ledger/scheduler ownership, witness retention and wider reconnect remain K7 work. Desktop and Rust terminal UI follow 2.0.0. Preserve existing H1–H2i evidence without treating those slices as a complete host or the next release dependency.
