@@ -38,7 +38,7 @@ export function pastedImagePaths(text: string): string[] | undefined {
 		const paths = parseAttachmentPaths(text);
 		if (!paths.length || paths.length > PROMPT_ATTACHMENT_LIMITS.maxAttachments) return undefined;
 		return paths.every((path) => {
-			const explicit = /^(?:[/~.]|file:\/\/|[a-z]:[\\/])/i.test(path);
+			const explicit = /^(?:[/~.]|file:\/\/|[a-z]:[\\/]|\\\\)/i.test(path);
 			return explicit && isLocalPath(path) && /\.(?:png|jpe?g|webp|gif)$/i.test(path);
 		})
 			? paths

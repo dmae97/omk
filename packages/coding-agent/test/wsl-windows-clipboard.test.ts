@@ -120,4 +120,18 @@ describe("Windows capture to WSL prompt", () => {
 		);
 		await expect(readClipboardImage({ platform: "linux", env })).rejects.toThrow(/Windows clipboard/i);
 	});
+
+	it("supports Windows Explorer copied image files via GetFileDropList and PNG clipboard streams", async () => {
+		const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]).toString(
+			"base64",
+		);
+		mocks.execFile.mockImplementation((_command, _args, _options, callback) =>
+			callback(null, `OMK_CLIPBOARD_IMG:${JPEG}`),
+		);
+		const image = await readClipboardImage({ platform: "linux", env });
+		expect(image?.mimeType).toBe("image/jpeg");
+		const script = mocks.execFile.mock.calls[0][1].join(" ");
+		expect(script).toContain("GetData('PNG')");
+		expect(script).toContain("GetFileDropList");
+	});
 });
