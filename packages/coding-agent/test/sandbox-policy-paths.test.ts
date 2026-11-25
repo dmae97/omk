@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-	isInsideSandboxPath,
-	matchesSandboxPath,
-	normalizeSandboxPath,
-} from "../src/core/sandbox/policy-paths.ts";
+import { isInsideSandboxPath, matchesSandboxPath, normalizeSandboxPath } from "../src/core/sandbox/policy-paths.ts";
 
 // These helpers use POSIX paths (path.resolve on win32 would backslash-normalize
 // differently), so the suite is skipped on Windows.
