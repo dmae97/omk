@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { normalizePath, resolvePath } from "./paths.ts";
@@ -55,9 +55,18 @@ export function terminalMarkdownLinks(cwd: string, options: TerminalLinkEnvironm
 		},
 		resolveFileLink(text: string): string | undefined {
 			if (/^[a-z][a-z\d+.-]*:/i.test(text) && !/^[a-z]:[\\/]/i.test(text)) return undefined;
-			if (/[\x00-\x1f\x7f]/.test(text) || (!/[\\/]/.test(text) && !/\.[a-z\d]{1,10}$/i.test(text))) return undefined;
+			if (!text || /[\x00-\x1f\x7f]/.test(text)) return undefined;
 			const path = resolvePath(text, cwd);
-			return existsSync(path) ? terminalFileUrl(text, cwd, options) : undefined;
+			if (/[\\/]/.test(text) || /\.[a-z\d]{1,10}$/i.test(text)) {
+				return existsSync(path) ? terminalFileUrl(text, cwd, options) : undefined;
+			}
+			try {
+				return statSync(path, { throwIfNoEntry: false })?.isDirectory()
+					? terminalFileUrl(text, cwd, options)
+					: undefined;
+			} catch {
+				return undefined;
+			}
 		},
 	};
 }
