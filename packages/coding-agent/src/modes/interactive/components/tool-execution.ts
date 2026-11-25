@@ -1,6 +1,6 @@
 import { Box, type Component, Container, Spacer, Text, type TUI } from "omk-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
-import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
+import { getCachedAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
 import { theme } from "../theme/theme.ts";
 import { getBuiltinToolRenderers } from "../tool-renderers/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../tool-renderers/render-utils.ts";
@@ -58,7 +58,7 @@ export class ToolExecutionComponent extends Container {
 		this.toolCallId = toolCallId;
 		this.args = args;
 		this.toolDefinition = toolDefinition;
-		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
+		this.builtInToolDefinition = getCachedAllToolDefinitions(cwd)[toolName as ToolName];
 		this.builtinRenderers = getBuiltinToolRenderers(toolName);
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;

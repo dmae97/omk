@@ -198,6 +198,26 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 	};
 }
 
+const MAX_CACHED_TOOL_DEFINITION_CWDS = 8;
+const cachedAllToolDefinitions = new Map<string, Record<ToolName, ToolDef>>();
+
+/** Reuse stateless built-in tool definitions per cwd to avoid per-tool-call UI reallocations. */
+export function getCachedAllToolDefinitions(cwd: string): Record<ToolName, ToolDef> {
+	const existing = cachedAllToolDefinitions.get(cwd);
+	if (existing) {
+		cachedAllToolDefinitions.delete(cwd);
+		cachedAllToolDefinitions.set(cwd, existing);
+		return existing;
+	}
+	const created = createAllToolDefinitions(cwd);
+	cachedAllToolDefinitions.set(cwd, created);
+	if (cachedAllToolDefinitions.size > MAX_CACHED_TOOL_DEFINITION_CWDS) {
+		const oldest = cachedAllToolDefinitions.keys().next().value;
+		if (oldest !== undefined) cachedAllToolDefinitions.delete(oldest);
+	}
+	return created;
+}
+
 export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 	return [
 		createReadTool(cwd, options?.read),

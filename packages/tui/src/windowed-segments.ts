@@ -158,3 +158,20 @@ export function freezeAboveBudget(
 		releaseRenderCache(child);
 	}
 }
+
+/** Promote oldest contiguous frozen segments into `virtualChildren` once frozen history exceeds `seed`. */
+export function promoteVirtualSegments(segments: FrozenSegment[], virtualChildren: Component[], seed: number): void {
+	let totalFrozenLines = 0;
+	for (const segment of segments) totalFrozenLines += segment.lines.length;
+	while (segments.length > 0 && totalFrozenLines > seed) {
+		const first = segments[0];
+		if (first.from !== virtualChildren.length) break;
+		if (totalFrozenLines - first.lines.length < seed) break;
+		segments.shift();
+		totalFrozenLines -= first.lines.length;
+		for (const child of first.children) {
+			releaseRenderCache(child);
+			virtualChildren.push(child);
+		}
+	}
+}

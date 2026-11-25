@@ -676,6 +676,7 @@ export class SessionManager {
 	private persist: boolean;
 	private flushed: boolean = false;
 	private fileEntries: FileEntry[] = [];
+	private entriesCache: SessionEntry[] | undefined;
 	private byId: Map<string, SessionEntry> = new Map();
 	private labelsById: Map<string, string> = new Map();
 	private labelTimestampsById: Map<string, string> = new Map();
@@ -796,10 +797,7 @@ export class SessionManager {
 			parentSession: options?.parentSession,
 		};
 		this.fileEntries = [header];
-		this.byId.clear();
-		this.labelsById.clear();
-		this.labelTimestampsById.clear();
-		this.leafId = null;
+		this._buildIndex();
 		this.flushed = false;
 		this.acceptedDurableHead = null;
 
@@ -811,6 +809,7 @@ export class SessionManager {
 	}
 
 	private _buildIndex(): void {
+		this.entriesCache = undefined;
 		this.byId.clear();
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
@@ -934,6 +933,7 @@ export class SessionManager {
 	private _appendEntry(entry: SessionEntry): void {
 		if (!this.persist || !this.sessionFile) {
 			this.fileEntries.push(entry);
+			this.entriesCache?.push(entry);
 			this.byId.set(entry.id, entry);
 			this.leafId = entry.id;
 			return;
@@ -960,6 +960,7 @@ export class SessionManager {
 
 			// Accept memory only after every required persistence step succeeds.
 			this.fileEntries.push(entry);
+			this.entriesCache?.push(entry);
 			this.byId.set(entry.id, entry);
 			this.leafId = entry.id;
 			this.acceptedDurableHead = nextDurableHead;
@@ -1207,7 +1208,9 @@ export class SessionManager {
 	 * change the leaf pointer. Entries cannot be modified or deleted.
 	 */
 	getEntries(): SessionEntry[] {
-		return this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
+		if (!this.entriesCache)
+			this.entriesCache = this.fileEntries.filter((e): e is SessionEntry => e.type !== "session");
+		return this.entriesCache.slice();
 	}
 
 	/**

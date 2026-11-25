@@ -187,6 +187,7 @@ export interface CompletionSoundServiceDeps {
 
 export class CompletionSoundService {
 	private readonly playedRunIds = new Set<string>();
+	private static readonly MAX_PLAYED_RUN_IDS = 256;
 	private lastResult: CompletionSoundResult | null = null;
 	private readonly deps: CompletionSoundServiceDeps;
 
@@ -209,6 +210,11 @@ export class CompletionSoundService {
 				return this.finish({ backend: "none", attempted: false, success: true });
 			}
 			this.playedRunIds.add(event.promptRunId);
+			while (this.playedRunIds.size > CompletionSoundService.MAX_PLAYED_RUN_IDS) {
+				const oldest = this.playedRunIds.values().next().value;
+				if (oldest === undefined) break;
+				this.playedRunIds.delete(oldest);
+			}
 			const io = this.deps.io ?? defaultCompletionSoundIo();
 			const diagnostics: string[] = [];
 			for (const candidate of this.deps.candidates()) {
