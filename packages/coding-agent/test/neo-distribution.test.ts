@@ -48,7 +48,7 @@ describe("Neo distribution and safe setup", () => {
 			includeDefaults: false,
 		});
 		expect(loaded.skills.map((skill) => skill.name).sort()).toEqual(
-			[...NEO_SKILL_NAMES, "omk-tencent-memory"].sort(),
+			[...NEO_SKILL_NAMES, "herdr", "omk-tencent-memory"].sort(),
 		);
 		expect(loaded.diagnostics).toEqual([]);
 		expect(existsSync(join(root, ".omk", "mcp.json"))).toBe(false);
@@ -64,7 +64,7 @@ describe("Neo distribution and safe setup", () => {
 		writeFileSync(file, "---\nname: omk-site\ndescription: User owned site policy\n---\nUser policy\n");
 		const options = { cwd: root, agentDir: root, skillPaths: [file], includeDefaults: false };
 		const loaded = loadSkillsWithBundled(false, options);
-		expect(loaded.skills).toHaveLength(7);
+		expect(loaded.skills).toHaveLength(NEO_SKILL_NAMES.length + 2);
 		expect(loaded.skills.find((skill) => skill.name === "omk-site")?.filePath).toBe(file);
 		expect(loadSkillsWithBundled(true, options).skills.map((skill) => skill.filePath)).toEqual([file]);
 	});
@@ -82,7 +82,7 @@ describe("Neo distribution and safe setup", () => {
 				.getSkills()
 				.skills.map((skill) => skill.name)
 				.sort(),
-		).toEqual([...NEO_SKILL_NAMES, "omk-tencent-memory"].sort());
+		).toEqual([...NEO_SKILL_NAMES, "herdr", "omk-tencent-memory"].sort());
 	});
 	it("honors noSkills through DefaultResourceLoader without removing explicit skills", async () => {
 		const file = join(root, "explicit.md");

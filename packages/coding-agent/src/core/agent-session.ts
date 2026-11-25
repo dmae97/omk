@@ -106,6 +106,7 @@ import { DEFAULT_THINKING_LEVEL } from "./defaults.ts";
 import { devinPlaybookAppendForProvider } from "./devin-harness.ts";
 import { EVIDENCE_RECEIPT_CUSTOM_TYPES, EvidenceSessionShutdown } from "./evidence-lifecycle-session.ts";
 import type { ToolHtmlRenderer } from "./export-html/index.ts";
+import { wrapHerdrBlockedUI } from "./extensions/builtin/herdr-agent-state.ts";
 import {
 	type ContextUsage,
 	type ExtensionCommandContextActions,
@@ -4314,7 +4315,10 @@ export class AgentSession {
 	}
 
 	private _applyExtensionBindings(runner: ExtensionRunner): void {
-		runner.setUIContext(this._extensionUIContext, this._extensionMode);
+		runner.setUIContext(
+			wrapHerdrBlockedUI(this._extensionUIContext, this.resourceLoader.getEventBus?.(), this._extensionMode),
+			this._extensionMode,
+		);
 		runner.bindCommandContext(this._extensionCommandContextActions);
 
 		this._extensionErrorUnsubscriber?.();

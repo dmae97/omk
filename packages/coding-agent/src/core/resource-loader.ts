@@ -15,6 +15,7 @@ import { loadSkillsWithBundled } from "./bundled-skills.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import commandSafetyGate from "./extensions/builtin/command-safety-gate.ts";
 import { HARNESS_FACTORIES } from "./extensions/builtin/harness-factories.ts";
+import { createHerdrAgentStateExtension } from "./extensions/builtin/herdr-agent-state.ts";
 import { createTencentMemoryExtension } from "./extensions/builtin/tencent-memory.ts";
 import todoChecklist from "./extensions/builtin/todo-checklist.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
@@ -437,6 +438,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 				this.eventBus,
 				extensionsResult.runtime,
 				"<builtin:tencent-memory>",
+			);
+			extensionsResult.extensions.push(extension);
+		}
+		if (!isDisabledByEnv(process.env.OMK_HERDR)) {
+			const extension = await loadExtensionFromFactory(
+				createHerdrAgentStateExtension(),
+				this.cwd,
+				this.eventBus,
+				extensionsResult.runtime,
+				"<builtin:herdr-agent-state>",
 			);
 			extensionsResult.extensions.push(extension);
 		}

@@ -486,6 +486,12 @@
 			"description": "Tencent memory tool"
 		},
 		{
+			"id": "builtin.herdr-agent-state",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Herdr pane agent state and session reporting over local socket"
+		},
+		{
 			"id": "builtin.registry",
 			"disposition": "refused",
 			"stage": "K7",
@@ -612,6 +618,12 @@
 		{
 			"file": "harness-factories.ts",
 			"feature": "builtin.registry",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "herdr-agent-state.ts",
+			"feature": "builtin.herdr-agent-state",
 			"disposition": "refused",
 			"safety": false
 		},

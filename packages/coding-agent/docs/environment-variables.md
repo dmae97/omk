@@ -153,6 +153,7 @@ These variables are read by OMK itself. The default-on built-in harness flags be
 | `OMK_NEXT_SUGGESTIONS_PREFIX` | Experimental, default off, requires `OMK_NEXT_SUGGESTIONS`. Reuses the current candidate for exact-prefix inline suffix display and Tab acceptance at the document end, without a provider call per key. Mismatched input, mid-cursor editing, and active autocomplete dismiss it |
 | `OMK_NEXT_SUGGESTIONS_DIAGNOSTICS` | Default off, requires `OMK_NEXT_SUGGESTIONS`. Writes a `purpose: "suggestion"` turn-metrics record for every skipped suggestion (`suggestionSkip`), even with `OMK_NEXT_SUGGESTIONS_CAPS` off, and adds `quotaReadMs` (quota lookup time) to records made after the quota check. A `usage_unavailable` skip with `quotaReadMs` near 2000 is a quota lookup timeout. Records hold enums and numbers only, no prompt or suggestion text. Changes no request or display behavior |
 | `OMK_TURN_METRICS`, `OMK_TURN_METRICS_DIR` | Turn metrics are written under `.omk/metrics/` as sessions run; set `OMK_TURN_METRICS=0` to disable or `OMK_TURN_METRICS_DIR` to relocate. Aggregate with `omk stats`; see [Metrics](metrics.md) |
+| `OMK_HERDR` | Default on: when OMK runs in TUI mode inside a Herdr pane (`HERDR_ENV=1`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH`), reports `idle`/`working`/`blocked` state, persistent session resume commands, and quit release over `HERDR_SOCKET_PATH`. Set a disabling value (`0`/`false`/`off`/`disable`/`disabled`) to opt out; see [Herdr integration](herdr.md) |
 
 ### Accounting recovery and shutdown
 

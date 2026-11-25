@@ -46,6 +46,7 @@ describe.each(dialects)("real resource-loader builtin composition (%s)", (dialec
 			"<builtin:todo-checklist>",
 			...HARNESS_FACTORIES.map((item) => item.path),
 			"<builtin:tencent-memory>",
+			"<builtin:herdr-agent-state>",
 		];
 		expect(inventory.builtins.map((row) => row.id)).toEqual(expected);
 		for (let index = 0; index < 2; index++) {
