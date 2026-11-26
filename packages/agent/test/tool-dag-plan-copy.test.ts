@@ -12,7 +12,7 @@ import type { DagSchedulePlan, ResolvedClaimEntry } from "../src/tool-dag-schedu
 
 function buildPlan(): DagSchedulePlan {
 	return {
-		levels: [[0, 1], [2]],
+		levels: [[0], [1, 2]],
 		planKey: "plan-key-0127",
 		entries: [
 			{
@@ -22,8 +22,11 @@ function buildPlan(): DagSchedulePlan {
 			},
 			{
 				sourceIndex: 1,
-				resolution: { kind: "claims", claims: [{ kind: "path", key: "a.txt", access: "read" }] },
-				canonicalClaims: [{ kind: "path", key: "a.txt", access: "read" }],
+				resolution: {
+					kind: "claims",
+					claims: [{ kind: "path", key: "a.txt", access: "read", realKey: "/real/a.txt", inodeKey: "1:42" }],
+				},
+				canonicalClaims: [{ kind: "path", key: "a.txt", access: "read", realKey: "/real/a.txt", inodeKey: "1:42" }],
 			},
 			{
 				sourceIndex: 2,
@@ -58,8 +61,8 @@ describe("copyDagSchedulePlan", () => {
 
 		copy.levels[0].push(99);
 
-		expect(plan.levels[0]).toEqual([0, 1]);
-		expect(copy.levels[0]).toEqual([0, 1, 99]);
+		expect(plan.levels[0]).toStrictEqual([0]);
+		expect(copy.levels[0]).toStrictEqual([0, 99]);
 	});
 
 	it("detaches resolution claims so mutating a copied claim leaves the original alone", () => {
@@ -87,7 +90,7 @@ describe("copyDagSchedulePlan", () => {
 		const plan = buildPlan();
 		const copy = copyDagSchedulePlan(plan);
 
-		expect(copy.entries[0].resolution).toEqual({ kind: "exclusive" });
+		expect(copy.entries[0].resolution).toStrictEqual({ kind: "exclusive" });
 		expect(copy.entries[0].resolution).not.toBe(plan.entries[0].resolution);
 		expect(copy.entries[0].canonicalClaims).toEqual([]);
 		expect(copy.entries[0].sourceIndex).toBe(0);
@@ -103,7 +106,7 @@ describe("copyDagClaimEntries", () => {
 		const plan = buildPlan();
 		const entries = copyDagClaimEntries(plan.entries);
 
-		expect(entries).toEqual(plan.entries);
+		expect(entries).toStrictEqual(plan.entries);
 		expect(entries).toHaveLength(plan.entries.length);
 		expect(entries.map((entry) => entry.sourceIndex)).toEqual([0, 1, 2]);
 		for (let index = 0; index < entries.length; index++) {
