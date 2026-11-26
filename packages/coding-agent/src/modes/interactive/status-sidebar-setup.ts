@@ -1,9 +1,11 @@
 import type { TUI } from "omk-tui";
 import type { AgentSession } from "../../core/agent-session.ts";
 import type { FooterDataProvider } from "../../core/footer-data-provider.ts";
+import type { SettingsManager } from "../../core/settings-manager.ts";
 import { statusPaneLayout } from "./components/status-pane-layout.ts";
 import { STATUS_SIDEBAR_GUTTER_GAP, StatusSidebarComponent, statusSidebarWidth } from "./components/status-sidebar.ts";
 import { HybridStatusPanel } from "./hybrid-status-panel.ts";
+import { pinnedRailNotice } from "./layout-class.ts";
 import type { RNodePanelInput } from "./rnode/rnode-panel.ts";
 import type { StatusPanelActivitySnapshot } from "./status-panel-activity.ts";
 import { statusPanelModel } from "./status-panel-model.ts";
@@ -72,4 +74,24 @@ export function setupStatusSidebar(options: StatusSidebarSetup) {
 		visible(width, height) ? statusSidebarWidth(width) + STATUS_SIDEBAR_GUTTER_GAP : 0,
 	);
 	return { sidebar, tmuxRail, statusPanel };
+}
+
+export function toggleStatusSidebarState(
+	pinned: boolean,
+	hasCustomFooter: boolean,
+	settings: SettingsManager,
+	tmuxRail: TmuxStatusRail | undefined,
+	ui: TUI,
+	showStatus: (msg: string) => void,
+): boolean {
+	const next = !pinned;
+	settings.setPinStatusSidebar(next);
+	if (next && !hasCustomFooter) tmuxRail?.start();
+	else tmuxRail?.stop();
+	if (next && !tmuxRail?.active) {
+		const notice = pinnedRailNotice(ui.terminal.columns, ui.terminal.rows);
+		if (notice) showStatus(notice);
+	}
+	ui.requestRender();
+	return next;
 }

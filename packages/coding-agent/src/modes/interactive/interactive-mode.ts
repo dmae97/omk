@@ -176,16 +176,18 @@ import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
 import { UserMessageSelectorComponent } from "./components/user-message-selector.ts";
+import { renderWidgetPair } from "./components/widget-container.ts";
+import { type FilesSidebarController, mountFilesSidebarOnMode, runFilesSlashCommand } from "./files-sidebar-setup.ts";
 import { waitForInteractiveInput } from "./interactive-input.ts";
 import { runJevCommand } from "./jev-command.ts";
-import { pinnedRailNotice, railFits, railVisibility } from "./layout-class.ts";
+import { railFits, railVisibility } from "./layout-class.ts";
 import { type FooterPanelModel, type HybridStatusPanel, hybridControlPane, hybridFooter } from "./opentui-surfaces.ts";
 import { formatResourceDescription, getAutocompleteSourceTag } from "./resource-description.ts";
 import { handleRNodeInput } from "./rnode/rnode-command.ts";
 import { RNodeController } from "./rnode/rnode-controller.ts";
 import { createSkillPickerForDraft } from "./skill-picker-draft.ts";
 import { StatusPanelActivity } from "./status-panel-activity.ts";
-import { setupStatusSidebar } from "./status-sidebar-setup.ts";
+import { setupStatusSidebar, toggleStatusSidebarState } from "./status-sidebar-setup.ts";
 import {
 	getAvailableThemes,
 	getAvailableThemesWithPaths,
@@ -398,6 +400,7 @@ export class InteractiveMode {
 
 	// Pinned status sidebar (Ctrl+Q): bottom bar data as a fixed right rail
 	private statusSidebar: StatusSidebarComponent | undefined;
+	private filesSidebar: FilesSidebarController | undefined;
 	/** OpenTUI rendering of the pinned rail; undefined when `OMK_OPENTUI_STATUS_RAIL=0`. */
 	private hybridStatusPanel: HybridStatusPanel | undefined;
 	/** OpenTUI renderings of the Ctrl+O control pane and the built-in footer, under the same switch. */
@@ -872,6 +875,7 @@ export class InteractiveMode {
 				() => this.session,
 				this.footerDataProvider,
 				() => this.ui.viewportTop === 0,
+				() => this.filesSidebar?.model.getMode() ?? "hidden",
 			);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
@@ -908,6 +912,14 @@ export class InteractiveMode {
 		this.statusSidebar = status.sidebar;
 		this.hybridStatusPanel = status.statusPanel;
 		this.tmuxStatusRail = status.tmuxRail;
+		this.filesSidebar = mountFilesSidebarOnMode(
+			this.ui,
+			this.settingsManager,
+			() => this.session.sessionManager.getCwd(),
+			() => this.editor,
+			this.defaultEditor,
+			() => this.builtInHeader?.invalidate(),
+		);
 
 		this.ui.setFocus(this.editor);
 
@@ -2109,7 +2121,11 @@ export class InteractiveMode {
 		}
 		// Clear transient extension overlays without evicting pinned chrome:
 		// a blind ui.hideOverlay() pops the status rail on session resume/new/fork/reload.
-		this.ui.hideOverlaysExcept(this.hybridStatusPanel ?? this.statusSidebar);
+		this.ui.hideOverlaysExcept(
+			this.hybridStatusPanel ?? this.statusSidebar,
+			this.filesSidebar?.sidebar,
+			this.filesSidebar?.preview,
+		);
 		this.clearExtensionTerminalInputListeners();
 		this.setExtensionFooter(undefined);
 		this.setExtensionHeader(undefined);
@@ -2139,38 +2155,7 @@ export class InteractiveMode {
 	 * Render all extension widgets to the widget container.
 	 */
 	private renderWidgets(): void {
-		if (!this.widgetContainerAbove || !this.widgetContainerBelow) return;
-		this.renderWidgetContainer(this.widgetContainerAbove, this.extensionWidgetsAbove, true, true);
-		this.renderWidgetContainer(this.widgetContainerBelow, this.extensionWidgetsBelow, false, false);
-		this.ui.requestRender();
-	}
-
-	private renderWidgetContainer(
-		container: Container,
-		widgets: Map<string, Component & { dispose?(): void }>,
-		spacerWhenEmpty: boolean,
-		leadingSpacer: boolean,
-	): void {
-		container.clear();
-
-		if (widgets.size === 0) {
-			if (spacerWhenEmpty) {
-				container.addChild(new Spacer(1));
-			}
-			return;
-		}
-
-		if (leadingSpacer) {
-			container.addChild(new Spacer(1));
-		}
-		for (const component of widgets.values()) {
-			container.addChild(component);
-		}
-	}
-
-	/** The pinned rail is only shown (and its gutter reserved) when the terminal is large enough. */
-	private isStatusSidebarVisible(termWidth: number, termHeight: number): boolean {
-		return this.statusRailVisibility(termWidth, termHeight) === "visible";
+		renderWidgetPair(this as unknown as Parameters<typeof renderWidgetPair>[0]);
 	}
 
 	private statusRailVisibility(width: number, height: number) {
@@ -2182,23 +2167,19 @@ export class InteractiveMode {
 			height,
 		);
 	}
+	private isStatusSidebarVisible(w: number, h: number): boolean {
+		return this.statusRailVisibility(w, h) === "visible";
+	}
 
-	/**
-	 * Toggle the pinned status sidebar: bottom bar data moves to a fixed right rail.
-	 */
 	private toggleStatusSidebar(): void {
-		this.statusSidebarPinned = !this.statusSidebarPinned;
-		this.settingsManager.setPinStatusSidebar(this.statusSidebarPinned);
-		if (this.statusSidebarPinned && this.customFooter === undefined) this.tmuxStatusRail?.start();
-		else this.tmuxStatusRail?.stop();
-		// The footer slot and the right gutter both key off isStatusSidebarVisible,
-		// so flipping the flag is enough — no child add/remove bookkeeping.
-		// Pinning on a terminal too small for the rail would otherwise change nothing visible.
-		if (this.statusSidebarPinned && !this.tmuxStatusRail?.active) {
-			const notice = pinnedRailNotice(this.ui.terminal.columns, this.ui.terminal.rows);
-			if (notice) this.showStatus(notice);
-		}
-		this.ui.requestRender();
+		this.statusSidebarPinned = toggleStatusSidebarState(
+			this.statusSidebarPinned,
+			this.customFooter !== undefined,
+			this.settingsManager,
+			this.tmuxStatusRail,
+			this.ui,
+			(m) => this.showStatus(m),
+		);
 	}
 
 	/**
@@ -2840,6 +2821,13 @@ export class InteractiveMode {
 			// Handle commands
 			if (/^\/open(?: |$)/.test(text))
 				return runOpenPathCommand(text, this.session.sessionManager.getCwd(), this.showWarning.bind(this));
+			if (/^\/files(?: |$)/.test(text))
+				return runFilesSlashCommand(
+					this.filesSidebar,
+					text,
+					() => this.editor.setText(""),
+					(m) => this.showStatus(m),
+				);
 			if (text === "/skills" || text.startsWith("/skills ")) {
 				this.editor.setText("");
 				this.showSkillPicker(text.slice("/skills".length).trim());

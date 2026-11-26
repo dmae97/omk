@@ -20,6 +20,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "skills", description: "Browse skills by name or description and insert into the draft" },
 	{ name: "attach", description: "Attach images: add <paths>, paste, list, remove [n], clear" },
 	{ name: "open", description: "Open a local image or folder with its desktop viewer (Tab completes paths)" },
+	{ name: "files", description: "Focus or toggle the left repository files sidebar (on|off|collapse|toggle)" },
 	{
 		name: "think",
 		description: "Select thinking level (auto routes per task through v4)",
