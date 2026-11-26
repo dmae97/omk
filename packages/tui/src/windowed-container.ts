@@ -1,6 +1,12 @@
 import { isRenderSettled } from "./render-generation.ts";
 import { type Component, Container } from "./tui.ts";
-import { dropFrozenChild, type FrozenSegment, freezeAboveBudget, reconcileSegments } from "./windowed-segments.ts";
+import {
+	dropFrozenChild,
+	type FrozenSegment,
+	freezeAboveBudget,
+	promoteVirtualSegments,
+	reconcileSegments,
+} from "./windowed-segments.ts";
 
 /**
  * Live-line budget: the bottom `max(120, 2 × terminal rows)` lines always
@@ -236,6 +242,7 @@ export class WindowedContainer extends Container {
 		// because frozen rows arrive as a few hundred segment arrays.
 		const out = parts.length < 8192 ? ([] as string[]).concat(...parts) : parts.flat();
 		freezeAboveBudget(this.segments, this.children, this.settled, parts, partStarts, live, liveLines, budget);
+		if (seed !== undefined) promoteVirtualSegments(this.segments, this.virtualChildren, seed);
 		return out;
 	}
 
