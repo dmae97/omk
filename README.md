@@ -6,8 +6,13 @@
 </p>
 
 <p align="center">
-  An open-source multi-agent coding CLI for your terminal: switch models in one
-  session and finish a goal only when your test passes.
+  An open-source AI coding agent for your terminal: switch models in one
+  session, add subagents when needed, and finish a goal only when your own check passes.
+</p>
+
+<p align="center">
+  <code>npm install -g open-multi-agent-kit --ignore-scripts</code> then run <code>omk</code> in your repo ·
+  <a href="#60-second-start">60-second start</a>
 </p>
 
 <p align="center">
