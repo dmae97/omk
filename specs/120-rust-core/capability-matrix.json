@@ -1,6 +1,6 @@
 {
 	"schema": "omk.capability-matrix.v1",
-	"spec": "specs/120-rust-core/spec.md §6",
+	"spec": "specs/120-rust-core/spec.md \u00a76",
 	"scope": "Dispositions for the Rust core in 2.0.0 (K0 to K5). The Node core is unchanged. Stage is the delivering stage for ported and hosted, and the stage that could lift a refusal",
 	"features": [
 		{
@@ -8,7 +8,7 @@
 			"disposition": "refused",
 			"stage": "K6",
 			"description": "Interactive terminal UI (`omk` without -p)",
-			"note": "Spec 120 §8: interactive mode on the Rust core is refused until K6"
+			"note": "Spec 120 \u00a78: interactive mode on the Rust core is refused until K6"
 		},
 		{
 			"id": "mode.print",
@@ -82,14 +82,14 @@
 			"disposition": "refused",
 			"stage": "K7",
 			"description": "Built-in `diagnostics` tool",
-			"note": "Not in the K3 tool set of spec 120 §4"
+			"note": "Not in the K3 tool set of spec 120 \u00a74"
 		},
 		{
 			"id": "tool.explore",
 			"disposition": "refused",
 			"stage": "K7",
 			"description": "Built-in `explore` tool",
-			"note": "Not in the K3 tool set of spec 120 §4"
+			"note": "Not in the K3 tool set of spec 120 \u00a74"
 		},
 		{
 			"id": "slash.settings",
@@ -111,6 +111,13 @@
 			"stage": "K6",
 			"description": "Built-in `/attach` command",
 			"note": "Interactive-only surface; RPC exposes its own command set"
+		},
+		{
+			"id": "slash.open",
+			"disposition": "refused",
+			"stage": "K6",
+			"description": "Built-in `/open` command",
+			"note": "Requires an interactive local desktop; RPC does not launch desktop applications"
 		},
 		{
 			"id": "slash.think",
@@ -380,14 +387,14 @@
 			"id": "packages.manifest-dialect",
 			"disposition": "ported",
 			"stage": "K4",
-			"description": "Package manifest dialects `omk` and `omk+pi` (spec 120 §5a)",
+			"description": "Package manifest dialects `omk` and `omk+pi` (spec 120 \u00a75a)",
 			"note": "Rust applies the dialect; the host receives a generic specifier map"
 		},
 		{
 			"id": "packages.doctor",
 			"disposition": "ported",
 			"stage": "K4",
-			"description": "`omk package doctor` static diagnosis (spec 120 §5a)"
+			"description": "`omk package doctor` static diagnosis (spec 120 \u00a75a)"
 		},
 		{
 			"id": "packages.installer",
@@ -490,6 +497,12 @@
 			"disposition": "refused",
 			"stage": "K7",
 			"description": "Herdr pane agent state and session reporting over local socket"
+		},
+		{
+			"id": "builtin.metacog",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Built-in Schoenfeld metacognition monitor, confidence decay, and /metacog command"
 		},
 		{
 			"id": "builtin.registry",
@@ -624,6 +637,12 @@
 		{
 			"file": "herdr-agent-state.ts",
 			"feature": "builtin.herdr-agent-state",
+			"disposition": "refused",
+			"safety": false
+		},
+		{
+			"file": "metacog.ts",
+			"feature": "builtin.metacog",
 			"disposition": "refused",
 			"safety": false
 		},

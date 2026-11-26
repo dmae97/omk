@@ -356,6 +356,41 @@ describe("StatusSidebarComponent (pinned opencode-style rail)", () => {
 		}
 	});
 
+	it("renders Antigravity Gemini quotas on the status rail", async () => {
+		const session = makeSession();
+		session.state.model.provider = "google-proxy";
+		session.state.model.id = "gemini-4-neon-xhigh";
+		session.state.model.baseUrl = "http://localhost:8080";
+		session.modelRegistry.getProviderAuthStatus = (provider) => ({
+			configured: provider === "google-proxy",
+		});
+		const requestRender = vi.fn();
+		const sidebar = new StatusSidebarComponent(
+			() => session as never,
+			makeFooterData() as never,
+			() => true,
+			() => 32,
+			{
+				requestRender,
+				fetchSubscriptionUsage: async () => ({
+					label: "ANTIGRAVITY",
+					windows: [{ label: "gemini-4-neon-xhigh", usedPercent: 3.38 }],
+					message: "1/1 accounts",
+				}),
+			},
+		);
+
+		sidebar.render(STATUS_SIDEBAR_WIDTH);
+		await vi.waitFor(() => expect(requestRender).toHaveBeenCalled());
+		const plainLines = sidebar.render(STATUS_SIDEBAR_WIDTH).map(stripAnsi);
+		const text = plainLines.join("\n");
+		expect(text).toContain("USAGE");
+		expect(text).toContain("ANTIGRAVITY");
+		expect(text).toContain("gemini-4-neon-xhigh");
+		expect(plainLines.some((line) => line.includes("gemini-4-neon-xhigh") && line.includes("3%"))).toBe(true);
+		expect(text).toContain("localhost");
+	});
+
 	it("renders Command Code 5H, 7D, and monthly quota bars on the status rail", async () => {
 		const session = makeSession();
 		session.state.model.provider = "commandcode";

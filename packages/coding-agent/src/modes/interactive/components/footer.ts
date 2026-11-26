@@ -15,12 +15,7 @@ const CONTEXT_PRESSURE_COLOR: Readonly<Record<ContextPressure, "error" | "warnin
 	critical: "error",
 };
 
-/**
- * Sanitize text for display in a single-line status.
- * Removes newlines, tabs, carriage returns, and other control characters.
- */
 function sanitizeStatusText(text: string): string {
-	// Replace newlines, tabs, carriage returns with space, then collapse multiple spaces
 	return text
 		.replace(/[\r\n\t]/g, " ")
 		.replace(/ +/g, " ")
@@ -152,35 +147,17 @@ export class FooterComponent implements Component {
 		const cpuStr = `${Math.round(cpu)}%`;
 		const memStr = `${Math.round(memPercent)}%`;
 
-		if (width >= 56) {
+		if (width >= 56)
 			return theme.fg(color, `CPU ${cpuStr} MEM ${memStr} (${formatBytes(memUsed)}/${formatBytes(memTotal)})`);
-		}
-		if (width >= 48) {
-			return theme.fg(color, `CPU ${cpuStr} MEM ${memStr}`);
-		}
-		if (width >= 30) {
-			return theme.fg(color, `${cpuStr} ${memStr}`);
-		}
-		if (width >= 18) {
-			return theme.fg(color, cpuStr);
-		}
+		if (width >= 48) return theme.fg(color, `CPU ${cpuStr} MEM ${memStr}`);
+		if (width >= 30) return theme.fg(color, `${cpuStr} ${memStr}`);
+		if (width >= 18) return theme.fg(color, cpuStr);
 		return undefined;
 	}
 
-	/**
-	 * No-op: git branch caching now handled by provider.
-	 * Kept for compatibility with existing call sites in interactive-mode.
-	 */
-	invalidate(): void {
-		// No-op: git branch is cached/invalidated by provider
-	}
+	invalidate(): void {}
 
-	/**
-	 * Clean up resources.
-	 * Git watcher cleanup now handled by provider.
-	 */
 	dispose(): void {
-		// Git watcher cleanup handled by provider
 		this.setMetricsTickHandler(undefined);
 	}
 
@@ -219,41 +196,36 @@ export class FooterComponent implements Component {
 			contextUsage?.percent !== null ? (Math.floor(contextPercentValue * 10) / 10).toFixed(1) : "?";
 
 		// Replace home directory with ~
-		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
-
-		// Add git branch if available
+		const cwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
 		const branch = this.footerData.getGitBranch();
-		if (branch) {
-			pwd = `${pwd} (${branch})`;
-		}
-
-		// Add session name if set
 		const sessionName = this.session.sessionManager.getSessionName();
+		const metaDot = theme.fg("borderMuted", " · ");
+		const metaSegments: string[] = [`${theme.fg("dim", "CWD")} ${theme.fg("muted", sanitizeStatusText(cwd))}`];
+		if (branch) {
+			metaSegments.push(`${theme.fg("dim", "GIT")} ${theme.fg("muted", sanitizeStatusText(branch))}`);
+		}
 		if (sessionName) {
-			pwd = `${pwd} • ${sessionName}`;
+			metaSegments.push(theme.fg("dim", sanitizeStatusText(sessionName)));
 		}
 
 		// Build stats line. Each part carries a drop priority so narrow terminals
 		// shed low-value segments first instead of truncating the context stats tail.
-		const statsParts: Array<{ text: string; priority: number }> = [];
+		const statsParts: Array<{ text: string; priority: number; styled?: boolean }> = [];
 		if (totalInput) statsParts.push({ text: `↑${formatTokens(totalInput)}`, priority: 3 });
 		if (totalOutput) statsParts.push({ text: `↓${formatTokens(totalOutput)}`, priority: 3 });
 		if (totalCacheRead) statsParts.push({ text: `R${formatTokens(totalCacheRead)}`, priority: 2 });
 		if (totalCacheWrite) statsParts.push({ text: `W${formatTokens(totalCacheWrite)}`, priority: 2 });
 
-		// Show cost with "(sub)" indicator if using OAuth subscription
 		const usingSubscription = state.model ? this.session.modelRegistry.isUsingOAuth(state.model) : false;
 		if (totalCost || usingSubscription) {
 			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
 			statsParts.push({ text: costStr, priority: 4 });
 		}
 
-		// Add CPU/memory metrics (opt-in); degrade gracefully when horizontal space is tight.
 		const metricsSegment = this.buildMetricsSegment(width);
 		if (metricsSegment) {
-			statsParts.push({ text: metricsSegment, priority: 1 });
+			statsParts.push({ text: metricsSegment, priority: 1, styled: true });
 		}
-		// Package intake status is internal jargon for sessions without packages - hide when empty.
 		const packageIntake = this.footerData.getPackageIntakeSummary();
 		if (packageIntake.total > 0) {
 			statsParts.push({ text: formatPackageIntake(packageIntake), priority: 2 });
@@ -266,12 +238,13 @@ export class FooterComponent implements Component {
 				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
 		const pressureColor = CONTEXT_PRESSURE_COLOR[contextPressure(contextUsage?.percent)];
 		const contextPercentStr = pressureColor ? theme.fg(pressureColor, contextPercentDisplay) : contextPercentDisplay;
-		// Context usage is the most important number in the footer - never drop it.
-		statsParts.push({ text: contextPercentStr, priority: Number.POSITIVE_INFINITY });
+		statsParts.push({ text: contextPercentStr, priority: Number.POSITIVE_INFINITY, styled: Boolean(pressureColor) });
 
-		// Drop the lowest-priority parts until the stats line fits.
+		const joinStats = (parts: readonly { text: string; styled?: boolean }[]): string =>
+			parts.map((part) => (part.styled ? part.text : theme.fg("dim", part.text))).join(metaDot);
+
 		let activeParts = [...statsParts];
-		let statsLeft = activeParts.map((part) => part.text).join(" ");
+		let statsLeft = joinStats(activeParts);
 		while (visibleWidth(statsLeft) > width) {
 			const droppable = activeParts.filter((part) => Number.isFinite(part.priority));
 			if (droppable.length === 0) break;
@@ -280,24 +253,18 @@ export class FooterComponent implements Component {
 				if (part.priority < lowest.priority) lowest = part;
 			}
 			activeParts = activeParts.filter((part) => part !== lowest);
-			statsLeft = activeParts.map((part) => part.text).join(" ");
+			statsLeft = joinStats(activeParts);
 		}
 
-		// Add model name on the right side, plus thinking level if model supports it
 		const modelName = state.model?.id || "no-model";
-
 		let statsLeftWidth = visibleWidth(statsLeft);
-
-		// Final fallback: truncate if even the undroppable parts overflow
 		if (statsLeftWidth > width) {
-			statsLeft = truncateToWidth(statsLeft, width, "...");
+			statsLeft = truncateToWidth(statsLeft, width, theme.fg("dim", "…"));
 			statsLeftWidth = visibleWidth(statsLeft);
 		}
 
-		// Calculate available space for padding (minimum 2 spaces between stats and model)
 		const minPadding = 2;
 
-		// Add thinking level indicator if model supports reasoning
 		let rightSideWithoutProvider = modelName;
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
@@ -305,18 +272,15 @@ export class FooterComponent implements Component {
 				thinkingLevel === "off" ? `${modelName} • thinking off` : `${modelName} • ${thinkingLevel}`;
 		}
 
-		// Prepend the provider in parentheses if there are multiple providers and there's enough room
 		let rightSide = rightSideWithoutProvider;
 		if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
 			const endpointHost = formatEndpointForFooter(state.model.baseUrl);
 			const providerLabel = endpointHost ? `${state.model.provider} · ${endpointHost}` : state.model.provider;
 			rightSide = `(${providerLabel}) ${rightSideWithoutProvider}`;
 			if (endpointHost && statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
-				// Too wide with endpoint host; fall back to provider-only
 				rightSide = `(${state.model.provider}) ${rightSideWithoutProvider}`;
 			}
 			if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
-				// Too wide, fall back
 				rightSide = rightSideWithoutProvider;
 			}
 		}
@@ -325,46 +289,39 @@ export class FooterComponent implements Component {
 		const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
 
 		let statsLine: string;
+		let styledRight = "";
 		if (totalNeeded <= width) {
-			// Both fit - add padding to right-align model
 			const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
-			statsLine = statsLeft + padding + rightSide;
+			styledRight = theme.fg("muted", rightSide);
+			statsLine = statsLeft + padding + styledRight;
 		} else {
-			// Need to truncate right side
 			const availableForRight = width - statsLeftWidth - minPadding;
 			if (availableForRight > 0) {
 				const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
 				const truncatedRightWidth = visibleWidth(truncatedRight);
 				const padding = " ".repeat(Math.max(0, width - statsLeftWidth - truncatedRightWidth));
-				statsLine = statsLeft + padding + truncatedRight;
+				styledRight = theme.fg("muted", truncatedRight);
+				statsLine = statsLeft + padding + styledRight;
 			} else {
-				// Not enough space for right side at all
 				statsLine = statsLeft;
 			}
 		}
 
-		// Apply dim to each part separately. statsLeft may contain color codes (for context %)
-		// that end with a reset, which would clear an outer dim wrapper. So we dim the parts
-		// before and after the colored section independently.
-		const dimStatsLeft = theme.fg("dim", statsLeft);
-		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
-		const dimRemainder = theme.fg("dim", remainder);
+		const pwdLine = truncateToWidth(metaSegments.join(metaDot), width, theme.fg("dim", "…"));
+		const lines = [pwdLine, statsLine];
 
-		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
-		const lines = [pwdLine, dimStatsLeft + dimRemainder];
-
-		// Add extension statuses on a single line, sorted by key alphabetically
 		const extensionStatuses = this.footerData.getExtensionStatuses();
 		if (extensionStatuses.size > 0) {
 			const sortedStatuses = Array.from(extensionStatuses.entries())
 				.sort(([a], [b]) => a.localeCompare(b))
-				.map(([, text]) => sanitizeStatusText(text));
-			const statusLine = sortedStatuses.join(" ");
-			// Truncate to terminal width with dim ellipsis for consistency with footer style
-			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
+				.map(([, text]) => sanitizeStatusText(text))
+				.filter(Boolean);
+			if (sortedStatuses.length > 0) {
+				const statusLine = `${theme.fg("borderMuted", "│ ")}${sortedStatuses.join(metaDot)}`;
+				lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "…")));
+			}
 		}
 
-		// The padding is spaces only, so the trimmed remainder is exactly the right-aligned text.
-		return { lines, statsLeft: dimStatsLeft, statsRight: theme.fg("dim", remainder.trimStart()) };
+		return { lines, statsLeft, statsRight: styledRight };
 	}
 }

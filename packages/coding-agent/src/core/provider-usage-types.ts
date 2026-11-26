@@ -22,6 +22,7 @@ export type PassiveUsageEntry = { readonly primary?: ObservedCodexWindow; readon
 export type UsageKind =
 	| "codex"
 	| "claude"
+	| "antigravity"
 	| "kimi"
 	| "zai"
 	| "grok"

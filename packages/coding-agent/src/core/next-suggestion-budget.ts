@@ -90,15 +90,23 @@ export function estimateSuggestionCostUsd(model: Model<Api>, context: Context, m
 	return (estimateContextInputTokens(context) * inputRate + maxOutputTokens * (cost.output ?? 0)) / 1_000_000;
 }
 
-// Codex subscriptions may report zero prices even on a measured cache hit.
+// Subscription and local-proxy endpoints may report zero prices even on a measured cache hit.
+const OBSERVED_ZERO_PRICE_CACHE_ENDPOINTS: ReadonlyArray<{ readonly provider: string; readonly api: string }> = [
+	{ provider: "openai-codex", api: "openai-codex-responses" },
+	{ provider: "antigravity", api: "anthropic-messages" },
+	{ provider: "google-proxy", api: "anthropic-messages" },
+];
+
 export function hasObservedCodexHit(
 	model: Model<Api>,
 	final: AssistantMessage,
 	options?: SimpleStreamOptions,
 ): boolean {
+	const allowed = OBSERVED_ZERO_PRICE_CACHE_ENDPOINTS.some(
+		(entry) => entry.provider === model.provider && entry.api === model.api,
+	);
 	return (
-		model.provider === "openai-codex" &&
-		model.api === "openai-codex-responses" &&
+		allowed &&
 		final.api === model.api &&
 		final.provider === model.provider &&
 		final.model === model.id &&

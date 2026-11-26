@@ -21,6 +21,7 @@ interface ModelItem {
 	provider: string;
 	id: string;
 	model: Model<any>;
+	searchText: string;
 }
 
 interface ScopedModelItem {
@@ -191,6 +192,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 				provider: model.provider,
 				id: model.id,
 				model,
+				searchText: `${model.id} ${model.provider} ${model.provider}/${model.id}`,
 			}));
 		} catch (error) {
 			this.allModels = [];
@@ -210,6 +212,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			provider: scoped.model.provider,
 			id: scoped.model.id,
 			model: scoped.model,
+			searchText: `${scoped.model.id} ${scoped.model.provider} ${scoped.model.provider}/${scoped.model.id}`,
 		}));
 		this.activeModels = this.scope === "scoped" ? this.scopedModelItems : this.allModels;
 		this.rebuildProviderTabs();
@@ -299,13 +302,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 
 	private filterModels(query: string): void {
 		const providerModels = this.getProviderFilteredModels();
-		this.filteredModels = query
-			? fuzzyFilter(
-					providerModels,
-					query,
-					({ id, provider }) => `${id} ${provider} ${provider}/${id} ${provider} ${id}`,
-				)
-			: providerModels;
+		this.filteredModels = query ? fuzzyFilter(providerModels, query, (item) => item.searchText) : providerModels;
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
 		this.updateList();
 	}

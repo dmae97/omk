@@ -1,9 +1,11 @@
+import { createPstackWorkflowExtension } from "../../pstack-workflow-extension.ts";
 import type { ExtensionFactory } from "../types.ts";
 import deepseekHarness from "./deepseek-harness.ts";
 import deliverableGuard from "./deliverable-guard.ts";
 import finishCheck from "./finish-check.ts";
 import goalController from "./goal-controller.ts";
 import identicalLoop from "./identical-loop.ts";
+import { createMetacogExtension } from "./metacog.ts";
 import promptPreset from "./prompt-preset.ts";
 import toolPairRepair from "./tool-pair-repair.ts";
 
@@ -24,4 +26,6 @@ export const HARNESS_FACTORIES: readonly HarnessFactoryEntry[] = [
 	// Before finish-check, so a file restored at settle is in place for the verification turn (spec 034).
 	{ factory: (omk) => deliverableGuard(omk), path: "<builtin:deliverable-guard>", envVar: "OMK_DELIVERABLE_GUARD" },
 	{ factory: (omk) => finishCheck(omk), path: "<builtin:finish-check>", envVar: "OMK_FINISH_CHECK" },
+	{ factory: createPstackWorkflowExtension(), path: "<builtin:pstack-workflow>", envVar: "OMK_PSTACK_WORKFLOW" },
+	{ factory: createMetacogExtension(), path: "<builtin:metacog>", envVar: "OMK_METACOG" },
 ];

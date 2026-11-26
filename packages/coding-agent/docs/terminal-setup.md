@@ -12,6 +12,11 @@ OMK enables enhanced key reporting when available. If Terminal.app still sends p
 
 This fallback only works when omk runs on the same Mac as Terminal.app. It cannot detect the local keyboard over remote SSH.
 
+To attach a clipboard image to the prompt on macOS, use **Control+V** when your
+terminal forwards it, or type `/attach paste`. **Command+V** is usually handled
+by the terminal. If it does not send an image paste event to OMK, use the
+shortcut above or drag an image file into the prompt.
+
 ## Ghostty
 
 Add to your Ghostty config (`~/Library/Application Support/com.mitchellh.ghostty/config` on macOS, `~/.config/ghostty/config` on Linux):
@@ -128,6 +133,14 @@ text after this opt-in. OMK does not change terminal settings automatically.
 See [Windows setup](windows.md#windows-screenshot-paste) for clipboard prerequisites
 and error behavior. Inline image rendering is terminal-dependent; an attachment
 chip does not require the terminal to display image pixels.
+
+## Open images and folders without Ctrl-click
+
+Type `/open ` and press **Tab** to complete a path from the session directory.
+Submit to open an image in its default viewer or a folder in the file manager.
+You can also paste a full local path or file URL. Other file types open their
+containing folder. `/open` on its own opens the session directory.
+This command needs a local desktop. On Windows and WSL it uses Windows PowerShell.
 
 ## xfce4-terminal, terminator
 

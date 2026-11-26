@@ -29,9 +29,9 @@ style Windows drive mounts use `file:///C:/...`. Native Linux/macOS file links k
 their native paths; SSH sessions do not rewrite paths into the local WSL namespace.
 Custom drive mount locations remain accessible through the WSL UNC URL.
 
-Markdown links, image references, existing inline-code file paths, and built-in tool
-path headers support this behavior. Ordinary code is not treated as a file. Terminals
-without OSC 8 support show the resolved URL in Markdown instead of a hidden target.
+Markdown links, image references, existing inline-code files and folders, and built-in
+tool path headers support this behavior. Terminals without OSC 8 support show the
+full URL as text instead of relying on Ctrl+click.
 The terminal and Windows file associations decide which application opens the file.
 A missing artifact must still be created or its path corrected; URL conversion does
 not copy files or start a web server.
@@ -57,8 +57,9 @@ contents or forwards provider-key environment variables to its child process.
 An empty Windows clipboard does not fall through to a stale Linux image. If Windows
 interop fails, Linux readers remain fallback sources; if none works, the editor
 reports a clipboard failure. Empty-image and successful-attachment states also have
-visible messages instead of silent no-ops. Native Linux/macOS/Windows readers remain
-unchanged. External/custom editors must forward the configured image-paste action.
+visible messages instead of silent no-ops. Native Windows falls back to Windows
+PowerShell when the native clipboard reader returns no image. External/custom
+editors must forward the configured image-paste action.
 
 If a screenshot still does not attach, first confirm that an image is on the Windows
 clipboard and try Alt+V. Check WSL interop/PowerShell if OMK reports acquisition failure,

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_EXTERNAL_USER_AGENT, type ProviderRateLimitSnapshot, type ProviderRateLimitWindow } from "omk-ai";
 import type { AgentSession } from "./agent-session.ts";
+import { fetchAntigravityUsage } from "./provider-usage-antigravity.ts";
 import { fetchCommandCodeUsage } from "./provider-usage-commandcode.ts";
 import { fetchDevinUsage } from "./provider-usage-devin.ts";
 import { fetchOpenCodeGoUsage } from "./provider-usage-go.ts";
@@ -123,6 +124,8 @@ export async function loadSubscriptionUsage(
 				return await fetchClaudeUsage(usageSource.label, credential.apiKey, fetchImpl);
 			case "kimi":
 				return await fetchKimiUsage(usageSource.label, credential.apiKey, fetchImpl);
+			case "antigravity":
+				return await fetchAntigravityUsage(usageSource.label, credential.apiKey, fetchImpl, model.id);
 			case "zai":
 				return await fetchZaiUsage(usageSource.label, provider ?? model.provider, credential, fetchImpl);
 			case "grok":

@@ -63,7 +63,6 @@ function scenario() {
 		isVisionCapable: () => true,
 		materializeDraftImages: (ids: readonly string[]) => attachmentDraft.materialize(ids),
 		consumeDraftAttachments: (ids: readonly string[]) => attachmentDraft.consume(ids),
-		handleAttachCommand: (argument: string) => attachmentDraft.command(argument),
 	};
 	invoke("setupEditorSubmitHandler", context);
 	editor.onPaste = (text) => attachmentDraft.paste(text);
@@ -96,6 +95,15 @@ describe("terminal prompt image input", () => {
 		expect(attachmentDraft.materialize(attachmentDraft.ids)).toEqual([
 			{ type: "image", mimeType: "image/png", data: PNG.toString("base64") },
 		]);
+	});
+	it("checks the image clipboard when the terminal forwards an empty paste frame", async () => {
+		clipboard.mockResolvedValue({ bytes: PNG, mimeType: "image/png" });
+		const { editor, attachmentDraft } = scenario();
+		editor.setText("keep this text");
+		editor.handleInput("\x1b[200~");
+		editor.handleInput("\x1b[201~");
+		await vi.waitFor(() => expect(attachmentDraft.materialize(attachmentDraft.ids)).toHaveLength(1));
+		expect(editor.getText()).toBe("keep this text");
 	});
 	it("drops an image into an existing prompt and submits a text-plus-image payload", async () => {
 		const file = join(root, "한글 screenshot.png");

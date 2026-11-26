@@ -686,6 +686,9 @@ export class SettingsManager {
 	}
 
 	setDefaultModelAndProvider(provider: string, modelId: string): void {
+		if (this.globalSettings.defaultProvider === provider && this.globalSettings.defaultModel === modelId) {
+			return;
+		}
 		this.globalSettings.defaultProvider = provider;
 		this.globalSettings.defaultModel = modelId;
 		this.markModified("defaultProvider");
@@ -1268,7 +1271,7 @@ export class SettingsManager {
 	}
 
 	getPinStatusSidebar(): boolean {
-		return this.settings.pinStatusSidebar ?? (process.env.OMK_PIN_STATUS_SIDEBAR ?? "1") === "1";
+		return this.settings.pinStatusSidebar ?? (process.env.OMK_PIN_STATUS_SIDEBAR ?? "0") === "1";
 	}
 
 	/**
