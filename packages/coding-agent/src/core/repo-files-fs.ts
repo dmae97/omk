@@ -1,4 +1,4 @@
-import { closeSync, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
+import { closeSync, type Dirent, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const ALWAYS_SKIP_DIRS = new Set([".git"]);
@@ -47,15 +47,26 @@ export interface ListRepoDirectoryOptions {
 	readonly maxEntries?: number;
 }
 
+export interface SearchRepoFilesOptions {
+	readonly includeHidden?: boolean;
+	readonly maxResults?: number;
+	readonly maxDepth?: number;
+	readonly maxScanned?: number;
+}
+
+export function formatCompactSize(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes < 0) return "";
+	if (bytes < 1024) return `${bytes}B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)}K`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+
 export function isSecretFileName(name: string): boolean {
 	return SECRET_FILE_RE.test(basename(name));
 }
 
 export function resolveSafeRepoPath(rootDir: string, relPath = ""): string {
-	if (typeof relPath !== "string" || relPath.includes("\0")) {
-		throw new Error("Path outside repository root");
-	}
-	if (isAbsolute(relPath)) {
+	if (typeof relPath !== "string" || relPath.includes("\0") || isAbsolute(relPath)) {
 		throw new Error("Path outside repository root");
 	}
 	const rootReal = realpathSync(resolve(rootDir));
@@ -113,6 +124,66 @@ export function listRepoDirectory(
 		truncated: entries.length > maxEntries,
 		entries: entries.slice(0, maxEntries),
 	};
+}
+
+export function searchRepoFiles(
+	rootDir: string,
+	query: string,
+	options: SearchRepoFilesOptions = {},
+): readonly RepoFileEntry[] {
+	const term = query.trim().toLowerCase();
+	if (!term) return [];
+	const includeHidden = Boolean(options.includeHidden);
+	const maxResults = Math.min(200, Math.max(10, Number(options.maxResults) || 80));
+	const maxDepth = Math.min(8, Math.max(1, Number(options.maxDepth) || 6));
+	const maxScanned = Math.min(5000, Math.max(100, Number(options.maxScanned) || 1500));
+	const rootReal = realpathSync(resolve(rootDir));
+	const matches: { entry: RepoFileEntry; score: number }[] = [];
+	let scanned = 0;
+
+	const walk = (dir: string, depth: number): void => {
+		if (depth > maxDepth || scanned >= maxScanned) return;
+		let dirents: Dirent[];
+		try {
+			dirents = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const dirent of dirents) {
+			if (scanned >= maxScanned) return;
+			const name = dirent.name;
+			if (ALWAYS_SKIP_DIRS.has(name)) continue;
+			if (!includeHidden && (name.startsWith(".") || DEFAULT_IGNORE_NAMES.has(name))) continue;
+			if (dirent.isSymbolicLink()) continue;
+			scanned += 1;
+			const full = join(dir, name);
+			const isDir = dirent.isDirectory();
+			const rel = relative(rootReal, full).split(sep).join("/");
+			const lowerName = name.toLowerCase();
+			const lowerRel = rel.toLowerCase();
+			if (lowerRel.includes(term)) {
+				let size = 0;
+				if (!isDir) {
+					try {
+						size = statSync(full).size;
+					} catch {
+						continue;
+					}
+				}
+				const score = lowerName === term ? 0 : lowerName.startsWith(term) ? 1 : lowerName.includes(term) ? 2 : 3;
+				matches.push({ entry: { name, path: rel, kind: isDir ? "dir" : "file", size }, score });
+			}
+			if (isDir) walk(full, depth + 1);
+		}
+	};
+
+	walk(rootReal, 0);
+	matches.sort((a, b) => {
+		if (a.score !== b.score) return a.score - b.score;
+		if (a.entry.kind !== b.entry.kind) return a.entry.kind === "file" ? -1 : 1;
+		return a.entry.path.localeCompare(b.entry.path, undefined, { sensitivity: "base" });
+	});
+	return matches.slice(0, maxResults).map((m) => m.entry);
 }
 
 export function readSafeRepoFile(rootDir: string, relPath: string, maxBytes = 65_536): RepoFilePreview {
