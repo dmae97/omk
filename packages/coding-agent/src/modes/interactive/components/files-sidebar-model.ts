@@ -5,35 +5,18 @@ import {
 	type RepoFilePreview,
 	readSafeRepoFile,
 } from "../../../core/repo-files-fs.ts";
+import {
+	buildDirectoryTreeRows,
+	buildSearchRows,
+	FILES_SIDEBAR_DEFAULT_WIDTH,
+	FILES_SIDEBAR_MAX_WIDTH,
+	FILES_SIDEBAR_MIN_WIDTH,
+	type FilesSidebarMode,
+	type SearchCache,
+	type VisibleTreeRow,
+} from "./files-sidebar-tree.ts";
 
-export type FilesSidebarMode = "open" | "collapsed" | "hidden";
-
-export interface VisibleTreeRow {
-	readonly entry: RepoFileEntry;
-	readonly depth: number;
-	readonly expanded: boolean;
-	readonly selected: boolean;
-}
-
-export const FILES_SIDEBAR_MIN_COLS = 108;
-export const FILES_SIDEBAR_MIN_ROWS = 16;
-export const FILES_SIDEBAR_DEFAULT_WIDTH = 28;
-export const FILES_SIDEBAR_MIN_WIDTH = 20;
-export const FILES_SIDEBAR_MAX_WIDTH = 44;
-export const FILES_SIDEBAR_RAIL_WIDTH = 3;
-
-export function filesSidebarGutterWidth(
-	mode: FilesSidebarMode,
-	sidebarWidth: number,
-	termWidth: number,
-	termHeight: number,
-): number {
-	if (mode === "hidden" || termWidth < FILES_SIDEBAR_MIN_COLS || termHeight < FILES_SIDEBAR_MIN_ROWS) {
-		return 0;
-	}
-	if (mode === "collapsed") return FILES_SIDEBAR_RAIL_WIDTH;
-	return Math.min(sidebarWidth, Math.max(FILES_SIDEBAR_MIN_WIDTH, Math.floor(termWidth * 0.28)));
-}
+export * from "./files-sidebar-tree.ts";
 
 export class FilesSidebarModel {
 	private rootDir: string;
@@ -45,6 +28,7 @@ export class FilesSidebarModel {
 	private filtering = false;
 	private expandedDirs = new Set<string>([""]);
 	private dirCache = new Map<string, readonly RepoFileEntry[]>();
+	private searchCache: SearchCache | null = null;
 	private selectedIndex = 0;
 	private scrollOffset = 0;
 	private preview: RepoFilePreview | null = null;
@@ -60,10 +44,23 @@ export class FilesSidebarModel {
 	}
 
 	getRootDir = (): string => this.rootDir;
-
 	getRootName = (): string => this.rootName;
-
 	getMode = (): FilesSidebarMode => this.mode;
+	getWidth = (): number => this.sidebarWidth;
+	getIncludeHidden = (): boolean => this.includeHidden;
+	getFilter = (): string => this.filter;
+	isFiltering = (): boolean => this.filtering;
+	setFiltering = (active: boolean): void => {
+		this.filtering = active;
+	};
+	getPreview = (): RepoFilePreview | null => this.preview;
+	getPreviewScrollOffset = (): number => this.previewScrollOffset;
+	getScrollOffset = (): number => this.scrollOffset;
+	getErrorMessage = (): string | null => this.errorMessage;
+	closePreview = (): void => {
+		this.preview = null;
+		this.previewScrollOffset = 0;
+	};
 
 	setMode(mode: FilesSidebarMode): void {
 		this.mode = mode;
@@ -77,8 +74,6 @@ export class FilesSidebarModel {
 		return this.mode;
 	}
 
-	getWidth = (): number => this.sidebarWidth;
-
 	adjustWidth(delta: number): number {
 		this.sidebarWidth = Math.max(
 			FILES_SIDEBAR_MIN_WIDTH,
@@ -87,35 +82,23 @@ export class FilesSidebarModel {
 		return this.sidebarWidth;
 	}
 
-	getIncludeHidden = (): boolean => this.includeHidden;
-
 	toggleHidden(): boolean {
 		this.includeHidden = !this.includeHidden;
 		this.refresh();
 		return this.includeHidden;
 	}
 
-	getFilter = (): string => this.filter;
-
-	isFiltering = (): boolean => this.filtering;
-
-	setFiltering = (active: boolean): void => {
-		this.filtering = active;
-	};
-
 	setFilter(next: string): void {
 		this.filter = next;
+		this.searchCache = null;
 		this.selectedIndex = 0;
 		this.scrollOffset = 0;
 	}
 
-	getPreview = (): RepoFilePreview | null => this.preview;
-
-	getPreviewScrollOffset = (): number => this.previewScrollOffset;
-
-	getScrollOffset = (): number => this.scrollOffset;
-
-	getErrorMessage = (): string | null => this.errorMessage;
+	startSearch(query: string): void {
+		this.setFilter(query);
+		this.filtering = true;
+	}
 
 	setRootDir(nextRoot: string): void {
 		if (nextRoot === this.rootDir) return;
@@ -123,12 +106,12 @@ export class FilesSidebarModel {
 		this.rootName = basename(nextRoot) || nextRoot;
 		this.expandedDirs = new Set([""]);
 		this.dirCache.clear();
+		this.searchCache = null;
 		this.filter = "";
 		this.filtering = false;
 		this.selectedIndex = 0;
 		this.scrollOffset = 0;
-		this.preview = null;
-		this.previewScrollOffset = 0;
+		this.closePreview();
 		this.loadDir("", false);
 	}
 
@@ -148,56 +131,49 @@ export class FilesSidebarModel {
 
 	refresh(): void {
 		this.dirCache.clear();
-		for (const dir of this.expandedDirs) {
-			this.loadDir(dir, true);
-		}
+		this.searchCache = null;
+		for (const dir of this.expandedDirs) this.loadDir(dir, true);
 		this.clampSelection();
 	}
 
 	collapseAll(): void {
 		this.expandedDirs = new Set([""]);
+		this.filter = "";
+		this.filtering = false;
+		this.searchCache = null;
 		this.selectedIndex = 0;
 		this.scrollOffset = 0;
 		if (!this.dirCache.has("")) this.loadDir("", false);
 	}
 
 	getVisibleRows(): VisibleTreeRow[] {
-		const term = this.filter.trim().toLowerCase();
-		const rows: Omit<VisibleTreeRow, "selected">[] = [];
-		const visit = (relPath: string, depth: number): boolean => {
-			const entries = this.dirCache.get(relPath) ?? [];
-			let anyMatched = false;
-			for (const entry of entries) {
-				const expanded = entry.kind === "dir" && this.expandedDirs.has(entry.path);
-				const matchSelf = !term || entry.path.toLowerCase().includes(term);
-				const insertIdx = rows.length;
-				if (entry.kind === "dir" && expanded) {
-					rows.push({ entry, depth, expanded });
-					const childMatched = visit(entry.path, depth + 1);
-					if (!matchSelf && !childMatched) {
-						rows.splice(insertIdx);
-					} else {
-						anyMatched = true;
-					}
-				} else if (matchSelf) {
-					rows.push({ entry, depth, expanded });
-					anyMatched = true;
-				}
-			}
-			return anyMatched;
-		};
-		visit("", 0);
-		if (rows.length === 0) {
+		const term = this.filter.trim();
+		let rawRows: Omit<VisibleTreeRow, "selected">[];
+		if (term) {
+			const res = buildSearchRows(this.rootDir, term, this.includeHidden, this.expandedDirs, this.searchCache);
+			this.searchCache = res.cache;
+			rawRows = res.rows;
+		} else {
+			rawRows = buildDirectoryTreeRows(this.dirCache, this.expandedDirs);
+		}
+		if (rawRows.length === 0) {
 			this.selectedIndex = 0;
 			return [];
 		}
-		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, rows.length - 1));
-		return rows.map((row, idx) => ({ ...row, selected: idx === this.selectedIndex }));
+		this.selectedIndex = Math.max(0, Math.min(this.selectedIndex, rawRows.length - 1));
+		return rawRows.map((row, idx) => ({ ...row, selected: idx === this.selectedIndex }));
 	}
 
 	getSelectedEntry(): RepoFileEntry | null {
+		return this.getVisibleRows()[this.selectedIndex]?.entry ?? null;
+	}
+
+	selectVisibleIndex(index: number, viewportRows = 20): RepoFileEntry | null {
 		const rows = this.getVisibleRows();
-		return rows[this.selectedIndex]?.entry ?? null;
+		if (index < 0 || index >= rows.length) return null;
+		this.selectedIndex = index;
+		this.syncScroll(viewportRows, rows.length);
+		return rows[index]?.entry ?? null;
 	}
 
 	moveSelection(delta: number, viewportRows = 20): void {
@@ -207,13 +183,15 @@ export class FilesSidebarModel {
 		this.syncScroll(viewportRows, rows.length);
 	}
 
+	scrollTree(delta: number, viewportRows = 20): void {
+		const maxScroll = Math.max(0, this.getVisibleRows().length - Math.max(1, viewportRows));
+		this.scrollOffset = Math.max(0, Math.min(maxScroll, this.scrollOffset + delta));
+	}
+
 	syncScroll(viewportRows: number, totalRows: number): void {
 		const cap = Math.max(1, viewportRows);
-		if (this.selectedIndex < this.scrollOffset) {
-			this.scrollOffset = this.selectedIndex;
-		} else if (this.selectedIndex >= this.scrollOffset + cap) {
-			this.scrollOffset = this.selectedIndex - cap + 1;
-		}
+		if (this.selectedIndex < this.scrollOffset) this.scrollOffset = this.selectedIndex;
+		else if (this.selectedIndex >= this.scrollOffset + cap) this.scrollOffset = this.selectedIndex - cap + 1;
 		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, Math.max(0, totalRows - cap)));
 	}
 
@@ -221,9 +199,21 @@ export class FilesSidebarModel {
 		const entry = this.getSelectedEntry();
 		if (!entry) return { action: "none" };
 		if (entry.kind === "dir") {
-			if (this.expandedDirs.has(entry.path)) {
-				this.expandedDirs.delete(entry.path);
-			} else {
+			if (this.filter.trim()) {
+				this.setFilter("");
+				this.filtering = false;
+				let acc = "";
+				for (const part of entry.path.split("/")) {
+					acc = acc ? `${acc}/${part}` : part;
+					this.expandedDirs.add(acc);
+					this.loadDir(acc, false);
+				}
+				const idx = this.getVisibleRows().findIndex((r) => r.entry.path === entry.path);
+				if (idx >= 0) this.selectedIndex = idx;
+				return { action: "toggled-dir", path: entry.path };
+			}
+			if (this.expandedDirs.has(entry.path)) this.expandedDirs.delete(entry.path);
+			else {
 				this.expandedDirs.add(entry.path);
 				this.loadDir(entry.path, false);
 			}
@@ -245,8 +235,7 @@ export class FilesSidebarModel {
 		const slash = entry.path.lastIndexOf("/");
 		if (slash <= 0) return;
 		const parentPath = entry.path.slice(0, slash);
-		const rows = this.getVisibleRows();
-		const parentIdx = rows.findIndex((r) => r.entry.path === parentPath);
+		const parentIdx = this.getVisibleRows().findIndex((r) => r.entry.path === parentPath);
 		if (parentIdx >= 0) this.selectedIndex = parentIdx;
 	}
 
@@ -262,14 +251,9 @@ export class FilesSidebarModel {
 		}
 	}
 
-	closePreview(): void {
-		this.preview = null;
-		this.previewScrollOffset = 0;
-	}
-
 	scrollPreview(delta: number, viewportRows = 12): void {
 		if (!this.preview) return;
-		const totalLines = this.preview.content.split("\n").length;
+		const totalLines = this.preview.content.split(/\r?\n/).length;
 		const maxScroll = Math.max(0, totalLines - Math.max(1, viewportRows));
 		this.previewScrollOffset = Math.max(0, Math.min(maxScroll, this.previewScrollOffset + delta));
 	}

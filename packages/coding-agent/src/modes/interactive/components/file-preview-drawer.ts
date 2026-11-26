@@ -1,4 +1,5 @@
 import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
+import { formatCompactSize } from "../../../core/repo-files-fs.ts";
 import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { theme } from "../theme/theme.ts";
 import type { FilesSidebarModel } from "./files-sidebar-model.ts";
@@ -27,9 +28,13 @@ export class FilePreviewDrawerComponent implements Component {
 		const maxDrawerHeight = Math.max(6, Math.min(16, Math.floor(this.getRows() * 0.42)));
 		const bodyRows = Math.max(3, maxDrawerHeight - 2);
 		const pathLabel = singleLineDisplayText(preview.path);
-		const meta = `${preview.size} B${preview.truncated ? ", truncated" : ""}`;
+		const contentLines = preview.blocked || preview.binary ? [] : preview.content.split(/\r?\n/);
+		const start = this.model.getPreviewScrollOffset();
+		const end = Math.min(contentLines.length, start + bodyRows);
+		const rangeLabel = contentLines.length > 0 ? ` · L${start + 1}-${end}/${contentLines.length}` : "";
+		const meta = `${formatCompactSize(preview.size)}${preview.truncated ? "+" : ""}${rangeLabel}`;
 		const leftTitle = `${theme.fg("accent", "▫")} ${theme.bold(theme.fg("text", pathLabel))} ${theme.fg("dim", `(${meta})`)}`;
-		const rightHint = theme.fg("dim", "@ insert · Esc close");
+		const rightHint = theme.fg("dim", "⏎/@ insert · Esc close");
 
 		const lines: string[] = [renderHairlineRule(width, "┌", "┐", leftTitle, rightHint)];
 		const pipe = theme.fg("borderMuted", "│");
@@ -40,12 +45,12 @@ export class FilePreviewDrawerComponent implements Component {
 				`${pipe} ${padTo(theme.fg("warning", "[Protected secret file — preview blocked]"), inner)} ${pipe}`,
 			);
 		} else if (preview.binary) {
-			lines.push(`${pipe} ${padTo(theme.fg("dim", `[Binary file (${preview.size} bytes)]`), inner)} ${pipe}`);
+			lines.push(
+				`${pipe} ${padTo(theme.fg("dim", `[Binary file (${formatCompactSize(preview.size)})]`), inner)} ${pipe}`,
+			);
 		} else {
-			const contentLines = preview.content.split(/\r?\n/);
-			const start = this.model.getPreviewScrollOffset();
 			const slice = contentLines.slice(start, start + bodyRows);
-			const lnWidth = Math.max(3, String(start + slice.length).length);
+			const lnWidth = Math.max(3, String(Math.max(1, end)).length);
 			for (let i = 0; i < bodyRows; i++) {
 				const raw = slice[i];
 				if (raw === undefined) {
@@ -60,7 +65,7 @@ export class FilePreviewDrawerComponent implements Component {
 			}
 		}
 
-		lines.push(renderHairlineRule(width, "└", "┘", theme.fg("dim", "PgUp/PgDn scroll")));
+		lines.push(renderHairlineRule(width, "└", "┘", theme.fg("dim", "↑↓/Wheel scroll · Space/@ insert · Esc back")));
 		return lines;
 	}
 }

@@ -1,7 +1,6 @@
-import { type Component, type Focusable, Key, matchesKey, truncateToWidth, visibleWidth } from "omk-tui";
-import { singleLineDisplayText } from "../../../utils/display-text.ts";
-import { theme } from "../theme/theme.ts";
-import type { FilesSidebarModel, VisibleTreeRow } from "./files-sidebar-model.ts";
+import { type Component, type Focusable, Key, matchesKey } from "omk-tui";
+import type { FilesSidebarModel } from "./files-sidebar-model.ts";
+import { renderCollapsedFilesRail, renderOpenFilesSidebar } from "./files-sidebar-render.ts";
 
 export interface FilesSidebarCallbacks {
 	readonly getRows: () => number;
@@ -9,13 +8,6 @@ export interface FilesSidebarCallbacks {
 	readonly onInsertPath: (relPath: string) => void;
 	readonly onReturnFocus: () => void;
 	readonly onToggleMode: () => void;
-}
-
-function fitPad(text: string, width: number): string {
-	if (width <= 0) return "";
-	const clipped = visibleWidth(text) <= width ? text : truncateToWidth(text, width, "…");
-	const pad = Math.max(0, width - visibleWidth(clipped));
-	return `${clipped}${" ".repeat(pad)}`;
 }
 
 export class FilesSidebarComponent implements Component, Focusable {
@@ -28,6 +20,8 @@ export class FilesSidebarComponent implements Component, Focusable {
 		this.model = model;
 		this.cb = callbacks;
 	}
+
+	getTreeViewportRows = (): number => this.lastTreeViewportRows;
 
 	invalidate(): void {}
 
@@ -45,21 +39,8 @@ export class FilesSidebarComponent implements Component, Focusable {
 			return;
 		}
 		if (this.model.getPreview()) {
-			if (matchesKey(data, Key.escape)) {
-				this.model.closePreview();
-				this.cb.requestRender();
-				return;
-			}
-			if (matchesKey(data, Key.pageUp)) {
-				this.model.scrollPreview(-10);
-				this.cb.requestRender();
-				return;
-			}
-			if (matchesKey(data, Key.pageDown)) {
-				this.model.scrollPreview(10);
-				this.cb.requestRender();
-				return;
-			}
+			this.handlePreviewInput(data);
+			return;
 		}
 		if (matchesKey(data, Key.escape) || matchesKey(data, Key.tab)) {
 			this.cb.onReturnFocus();
@@ -75,6 +56,16 @@ export class FilesSidebarComponent implements Component, Focusable {
 			this.cb.requestRender();
 			return;
 		}
+		if (matchesKey(data, Key.pageUp)) {
+			this.model.moveSelection(-Math.max(5, this.lastTreeViewportRows - 2), this.lastTreeViewportRows);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.pageDown)) {
+			this.model.moveSelection(Math.max(5, this.lastTreeViewportRows - 2), this.lastTreeViewportRows);
+			this.cb.requestRender();
+			return;
+		}
 		if (matchesKey(data, Key.enter) || matchesKey(data, Key.right) || data === "l") {
 			this.model.activateSelected();
 			this.cb.requestRender();
@@ -85,7 +76,7 @@ export class FilesSidebarComponent implements Component, Focusable {
 			this.cb.requestRender();
 			return;
 		}
-		if (data === "@") {
+		if (data === "@" || data === " ") {
 			const entry = this.model.getSelectedEntry();
 			if (entry) this.cb.onInsertPath(entry.path);
 			return;
@@ -121,15 +112,65 @@ export class FilesSidebarComponent implements Component, Focusable {
 		}
 	}
 
+	private handlePreviewInput(data: string): void {
+		if (matchesKey(data, Key.escape)) {
+			this.model.closePreview();
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.up) || data === "k") {
+			this.model.scrollPreview(-1);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.down) || data === "j") {
+			this.model.scrollPreview(1);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.pageUp)) {
+			this.model.scrollPreview(-10);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.pageDown)) {
+			this.model.scrollPreview(10);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.enter) || data === "@" || data === " ") {
+			const path = this.model.getPreview()?.path;
+			if (path) this.cb.onInsertPath(path);
+		}
+	}
+
 	private handleFilterInput(data: string): void {
 		if (matchesKey(data, Key.escape)) {
-			this.model.setFilter("");
+			if (this.model.getFilter()) this.model.setFilter("");
 			this.model.setFiltering(false);
 			this.cb.requestRender();
 			return;
 		}
+		if (matchesKey(data, Key.up)) {
+			this.model.moveSelection(-1, this.lastTreeViewportRows);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.down)) {
+			this.model.moveSelection(1, this.lastTreeViewportRows);
+			this.cb.requestRender();
+			return;
+		}
+		if (matchesKey(data, Key.tab)) {
+			const entry = this.model.getSelectedEntry();
+			this.model.setFiltering(false);
+			if (entry) this.cb.onInsertPath(entry.path);
+			else this.cb.onReturnFocus();
+			return;
+		}
 		if (matchesKey(data, Key.enter)) {
 			this.model.setFiltering(false);
+			this.model.activateSelected();
 			this.cb.requestRender();
 			return;
 		}
@@ -148,100 +189,9 @@ export class FilesSidebarComponent implements Component, Focusable {
 		const height = Math.max(8, this.cb.getRows());
 		const mode = this.model.getMode();
 		if (mode === "hidden" || width < 2) return [];
-		if (mode === "collapsed" || width <= 4) {
-			return this.renderCollapsedRail(width, height);
-		}
-		return this.renderOpenSidebar(width, height);
-	}
-
-	private renderCollapsedRail(width: number, height: number): string[] {
-		const sep = theme.fg(this.focused ? "accent" : "borderMuted", "│");
-		const inner = Math.max(1, width - 1);
-		const labels = ["▸", "", "F", "I", "L", "E", "S"];
-		const lines: string[] = [];
-		for (let i = 0; i < height; i++) {
-			const glyph = labels[i] ?? "";
-			const styled = i === 0 ? theme.fg("accent", glyph) : theme.fg("dim", glyph);
-			lines.push(`${fitPad(glyph ? ` ${styled}` : "", inner)}${sep}`);
-		}
-		return lines;
-	}
-
-	private renderOpenSidebar(width: number, height: number): string[] {
-		const borderRole = this.focused ? "border" : "borderMuted";
-		const sep = theme.fg(borderRole, "│");
-		const inner = Math.max(4, width - 1);
-		const rule = `${theme.fg("borderMuted", "─".repeat(inner))}${theme.fg(borderRole, "┤")}`;
-		const lines: string[] = [];
-
-		// Header row: REPO · <name>  .* ⊞ ↻ ◂
-		const rootLabel = singleLineDisplayText(this.model.getRootName());
-		const hiddenBadge = this.model.getIncludeHidden() ? theme.fg("accent", ".*") : theme.fg("dim", ".*");
-		const tools = `${hiddenBadge} ${theme.fg("dim", "⊞ ↻ ◂")}`;
-		const toolsWidth = visibleWidth(tools);
-		const titleBudget = Math.max(4, inner - toolsWidth - 3);
-		const prefix = this.focused ? theme.fg("accent", "◧") : theme.fg("dim", "◧");
-		const title = `${prefix} ${theme.fg("muted", theme.bold(`REPO · ${rootLabel}`))}`;
-		const titleClip = visibleWidth(title) <= titleBudget ? title : truncateToWidth(title, titleBudget, "…");
-		const headGap = " ".repeat(Math.max(1, inner - 2 - visibleWidth(titleClip) - toolsWidth));
-		lines.push(` ${titleClip}${headGap}${tools} ${sep}`);
-		lines.push(rule);
-
-		// Filter input row
-		const filterVal = singleLineDisplayText(this.model.getFilter());
-		const filterLine = this.model.isFiltering()
-			? `${theme.fg("accent", "/")} ${theme.fg("text", filterVal)}${theme.fg("accent", "█")}`
-			: filterVal
-				? `${theme.fg("dim", "/")} ${theme.fg("text", filterVal)}`
-				: theme.fg("dim", "Filter repo files...");
-		lines.push(`${fitPad(` ${filterLine}`, inner)}${sep}`);
-		lines.push(rule);
-
-		// Tree body
-		const footerRows = 2;
-		const bodyRows = Math.max(1, height - lines.length - footerRows);
-		this.lastTreeViewportRows = bodyRows;
-		const visibleRows = this.model.getVisibleRows();
-		this.model.syncScroll(bodyRows, visibleRows.length);
-		const start = this.model.getScrollOffset();
-		const slice = visibleRows.slice(start, start + bodyRows);
-
-		if (slice.length === 0) {
-			const emptyMsg = this.model.getErrorMessage() ?? (filterVal ? "No matching files" : "Empty directory");
-			lines.push(`${fitPad(` ${theme.fg("dim", singleLineDisplayText(emptyMsg))}`, inner)}${sep}`);
-			for (let i = 1; i < bodyRows; i++) {
-				lines.push(`${" ".repeat(inner)}${sep}`);
-			}
-		} else {
-			for (const row of slice) {
-				lines.push(`${this.renderTreeRow(row, inner)}${sep}`);
-			}
-			for (let i = slice.length; i < bodyRows; i++) {
-				lines.push(`${" ".repeat(inner)}${sep}`);
-			}
-		}
-
-		// Bottom hint bar
-		lines.push(rule);
-		const hint = this.focused
-			? theme.fg("muted", " ↑↓ ⏎ @ / . c r [/] Esc")
-			: theme.fg("dim", " Alt+E focus · ^B/Alt+B");
-		lines.push(`${fitPad(hint, inner)}${sep}`);
-		return lines;
-	}
-
-	private renderTreeRow(row: VisibleTreeRow, inner: number): string {
-		const lead = row.selected ? theme.fg("accent", "┃") : " ";
-		const guides = row.depth > 0 ? theme.fg("borderMuted", "│ ".repeat(Math.min(row.depth, 5))) : "";
-		const chev = row.entry.kind === "dir" ? theme.fg("dim", row.expanded ? "▾" : "▸") : theme.fg("dim", "·");
-		const glyph = row.entry.kind === "dir" ? theme.fg("warning", "▣") : theme.fg("dim", "▫");
-		const name = singleLineDisplayText(row.entry.name);
-		const nameStyled = row.selected ? theme.bold(theme.fg("text", name)) : theme.fg("muted", name);
-		const suffix = row.selected ? ` ${theme.fg("dim", "@")}` : "";
-		const suffixW = row.selected ? 2 : 0;
-		const contentBudget = Math.max(1, inner - suffixW);
-		const left = `${lead}${guides}${chev} ${glyph} ${nameStyled}`;
-		const fitted = fitPad(left, contentBudget);
-		return `${fitted}${suffix}`;
+		if (mode === "collapsed" || width <= 4) return renderCollapsedFilesRail(width, height, this.focused);
+		return renderOpenFilesSidebar(this.model, this.focused, width, height, (rows) => {
+			this.lastTreeViewportRows = rows;
+		});
 	}
 }
