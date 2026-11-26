@@ -1,0 +1,1269 @@
+{
+  "schema": "omk.openai-completions-reasoning.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-reasoning-recorder.ts": "62a11ff9aeaa48ec5b69caf656a5c96fd21a922ded265b635c97f0d95c2536c8",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "reasoning-false-as-text-false-required-false",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": false,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": false,
+          "requiresReasoningContentOnAssistantMessages": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"one two\",\"reasoning\":\"first\\nsecond\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"kept\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-false-as-text-false-required-true",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": false,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": false,
+          "requiresReasoningContentOnAssistantMessages": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"one two\",\"reasoning\":\"first\\nsecond\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"kept\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-false-as-text-true-required-false",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": false,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": true,
+          "requiresReasoningContentOnAssistantMessages": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first\\n\\nsecond\"},{\"type\":\"text\",\"text\":\"one \"},{\"type\":\"text\",\"text\":\"two\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"kept\"},{\"type\":\"text\",\"text\":\"answer\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"only\"}]},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-false-as-text-true-required-true",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": false,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": true,
+          "requiresReasoningContentOnAssistantMessages": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first\\n\\nsecond\"},{\"type\":\"text\",\"text\":\"one \"},{\"type\":\"text\",\"text\":\"two\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"kept\"},{\"type\":\"text\",\"text\":\"answer\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"only\"}]},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-true-as-text-false-required-false",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": true,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": false,
+          "requiresReasoningContentOnAssistantMessages": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"one two\",\"reasoning\":\"first\\nsecond\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"kept\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-true-as-text-false-required-true",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": true,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": false,
+          "requiresReasoningContentOnAssistantMessages": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":\"one two\",\"reasoning\":\"first\\nsecond\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"kept\",\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":\"alone\",\"reasoning_content\":\"\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-true-as-text-true-required-false",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": true,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": true,
+          "requiresReasoningContentOnAssistantMessages": false
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first\\n\\nsecond\"},{\"type\":\"text\",\"text\":\"one \"},{\"type\":\"text\",\"text\":\"two\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"kept\"},{\"type\":\"text\",\"text\":\"answer\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"only\"}]},{\"role\":\"assistant\",\"content\":\"alone\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}]},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    },
+    {
+      "id": "reasoning-true-as-text-true-required-true",
+      "input": {
+        "provider": "synthetic",
+        "model": "m",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "reasoning": true,
+        "system": "",
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "requiresThinkingAsText": true,
+          "requiresReasoningContentOnAssistantMessages": true
+        },
+        "messages": [
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "first",
+                "thinkingSignature": "reasoning"
+              },
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "thinking",
+                "thinking": " \t"
+              },
+              {
+                "type": "thinking",
+                "thinking": "second"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "kept",
+                "thinkingSignature": "reasoning_content"
+              },
+              {
+                "type": "text",
+                "text": "answer"
+              },
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "only"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "thinking",
+                "thinking": "﻿"
+              },
+              {
+                "type": "text",
+                "text": "alone"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "a",
+                "name": "f",
+                "arguments": {},
+                "thoughtSignature": "{\"z\":1,\"a\":2}"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "model": "m",
+              "api": "openai-completions"
+            },
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"m\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"first\\n\\nsecond\"},{\"type\":\"text\",\"text\":\"one \"},{\"type\":\"text\",\"text\":\"two\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"kept\"},{\"type\":\"text\",\"text\":\"answer\"}],\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"only\"}],\"reasoning_content\":\"\"},{\"role\":\"assistant\",\"content\":\"alone\",\"reasoning_content\":\"\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"a\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{}\"}}],\"reasoning_details\":[{\"z\":1,\"a\":2}],\"reasoning_content\":\"\"},{\"role\":\"tool\",\"content\":\"No result provided\",\"tool_call_id\":\"a\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"tools\":[]}"
+      }
+    }
+  ]
+}

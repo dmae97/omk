@@ -1,0 +1,947 @@
+{
+  "schema": "omk.openai-responses-images.v1",
+  "source": {
+    "scripts/fixtures/openai-responses-images-recorder.ts": "f5e7c2fbbd648e72a7b2b4a18f9cb32afde21e482f441456174b686861724294",
+    "packages/ai/src/providers/openai-responses.ts": "e24fd470213a6ef6c4c23c88bf1de8e32023048cb4c659836a75389e008cf5ff",
+    "packages/ai/src/providers/openai-responses-shared.ts": "2b4b75585ee88793845e00260e4fd177be5e9ac4f5dec53521e7bc6ae6948311",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "vision-user-only",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-user-ordered",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "앞"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": "끝"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"앞\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/svg+xml;base64,not normalized+/=\\n \"},{\"type\":\"input_text\",\"text\":\"\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/svg+xml;base64,not normalized+/=\\n \"},{\"type\":\"input_text\",\"text\":\"끝\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-user-literal-marker",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\" \"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"},{\"type\":\"input_text\",\"text\":\"(tool image omitted: model does not support images)\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-user-per-turn",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": "plain"
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "",
+                "data": ""
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"plain\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:;base64,\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-tool-results",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": true,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "c0|fc_0",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c1|fc_1",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c2|fc_2",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c3|fc_3",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c4|fc_4",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c5|fc_5",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c6|fc_6",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c7|fc_7",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c8|fc_8",
+                "name": "f",
+                "arguments": {}
+              }
+            ]
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c0|fc_0",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c1|fc_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "a"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "b"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c2|fc_2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c3|fc_3",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c4|fc_4",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "only"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c5|fc_5",
+            "toolName": "f",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c6|fc_6",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": "x"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c7|fc_7",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c8|fc_8",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "",
+                "data": ""
+              },
+              {
+                "type": "text",
+                "text": "😀 \"q\""
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "after"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse",
+            "content": [
+              {
+                "type": "text",
+                "text": "t"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"function_call\",\"id\":\"fc_0\",\"call_id\":\"c0\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"c1\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_2\",\"call_id\":\"c2\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_3\",\"call_id\":\"c3\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_4\",\"call_id\":\"c4\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_5\",\"call_id\":\"c5\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_6\",\"call_id\":\"c6\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_7\",\"call_id\":\"c7\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_8\",\"call_id\":\"c8\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call_output\",\"call_id\":\"c0\",\"output\":[{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"function_call_output\",\"call_id\":\"c1\",\"output\":[{\"type\":\"input_text\",\"text\":\"a\\nb\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"function_call_output\",\"call_id\":\"c2\",\"output\":[{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"function_call_output\",\"call_id\":\"c3\",\"output\":[{\"type\":\"input_text\",\"text\":\"(tool image omitted: model does not support images)\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"function_call_output\",\"call_id\":\"c4\",\"output\":\"only\"},{\"type\":\"function_call_output\",\"call_id\":\"c5\",\"output\":\"(see attached image)\"},{\"type\":\"function_call_output\",\"call_id\":\"c6\",\"output\":[{\"type\":\"input_text\",\"text\":\"x\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/svg+xml;base64,not normalized+/=\\n \"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/svg+xml;base64,not normalized+/=\\n \"}]},{\"type\":\"function_call_output\",\"call_id\":\"c7\",\"output\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"function_call_output\",\"call_id\":\"c8\",\"output\":[{\"type\":\"input_text\",\"text\":\"😀 \\\"q\\\"\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:;base64,\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"after\"},{\"type\":\"input_image\",\"detail\":\"auto\",\"image_url\":\"data:image/png;base64,cG5n\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"t\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_12\"}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "text-user-only",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "text-user-ordered",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "앞"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": "끝"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"앞\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\"\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\"끝\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "text-user-literal-marker",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\" \"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\"(tool image omitted: model does not support images)\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "text-user-per-turn",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": "plain"
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "",
+                "data": ""
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"plain\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "text-tool-results",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "vision": false,
+        "system": "Synthetic system",
+        "messages": [
+          {
+            "role": "user",
+            "content": "go"
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "c0|fc_0",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c1|fc_1",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c2|fc_2",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c3|fc_3",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c4|fc_4",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c5|fc_5",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c6|fc_6",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c7|fc_7",
+                "name": "f",
+                "arguments": {}
+              },
+              {
+                "type": "toolCall",
+                "id": "c8|fc_8",
+                "name": "f",
+                "arguments": {}
+              }
+            ]
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c0|fc_0",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c1|fc_1",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "a"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "b"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c2|fc_2",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c3|fc_3",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c4|fc_4",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "only"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c5|fc_5",
+            "toolName": "f",
+            "content": [],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c6|fc_6",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              },
+              {
+                "type": "text",
+                "text": "x"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/svg+xml",
+                "data": "not normalized+/=\n "
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c7|fc_7",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ],
+            "isError": true
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "c8|fc_8",
+            "toolName": "f",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "",
+                "data": ""
+              },
+              {
+                "type": "text",
+                "text": "😀 \"q\""
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "after"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "source": {
+              "provider": "synthetic",
+              "api": "openai-responses",
+              "model": "synthetic-responses"
+            },
+            "stopReason": "toolUse",
+            "content": [
+              {
+                "type": "text",
+                "text": "t"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"go\"}]},{\"type\":\"function_call\",\"id\":\"fc_0\",\"call_id\":\"c0\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_1\",\"call_id\":\"c1\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_2\",\"call_id\":\"c2\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_3\",\"call_id\":\"c3\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_4\",\"call_id\":\"c4\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_5\",\"call_id\":\"c5\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_6\",\"call_id\":\"c6\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_7\",\"call_id\":\"c7\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call\",\"id\":\"fc_8\",\"call_id\":\"c8\",\"name\":\"f\",\"arguments\":\"{}\"},{\"type\":\"function_call_output\",\"call_id\":\"c0\",\"output\":\"(tool image omitted: model does not support images)\"},{\"type\":\"function_call_output\",\"call_id\":\"c1\",\"output\":\"a\\n(tool image omitted: model does not support images)\\nb\"},{\"type\":\"function_call_output\",\"call_id\":\"c2\",\"output\":\"\\n(tool image omitted: model does not support images)\"},{\"type\":\"function_call_output\",\"call_id\":\"c3\",\"output\":\"(tool image omitted: model does not support images)\"},{\"type\":\"function_call_output\",\"call_id\":\"c4\",\"output\":\"only\"},{\"type\":\"function_call_output\",\"call_id\":\"c5\",\"output\":\"(see attached image)\"},{\"type\":\"function_call_output\",\"call_id\":\"c6\",\"output\":\"(tool image omitted: model does not support images)\\nx\\n(tool image omitted: model does not support images)\"},{\"type\":\"function_call_output\",\"call_id\":\"c7\",\"output\":\"(image omitted: model does not support images)\\n(tool image omitted: model does not support images)\"},{\"type\":\"function_call_output\",\"call_id\":\"c8\",\"output\":\"(tool image omitted: model does not support images)\\n😀 \\\"q\\\"\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"after\"},{\"type\":\"input_text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"t\",\"annotations\":[]}],\"status\":\"completed\",\"id\":\"msg_omk_12\"}],\"stream\":true,\"store\":false}"
+      }
+    }
+  ]
+}

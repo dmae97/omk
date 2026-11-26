@@ -1,0 +1,1466 @@
+{
+  "schema": "omk.openai-responses-request.v1",
+  "source": {
+    "scripts/fixtures/openai-responses-recorder.ts": "920b87506e75d79293b6bfd904cc4ccf8bee2555378a214694b79dc3d3e9cc91",
+    "packages/ai/src/providers/openai-responses.ts": "e24fd470213a6ef6c4c23c88bf1de8e32023048cb4c659836a75389e008cf5ff",
+    "packages/ai/src/providers/openai-responses-shared.ts": "2b4b75585ee88793845e00260e4fd177be5e9ac4f5dec53521e7bc6ae6948311",
+    "packages/ai/src/providers/openai-prompt-cache.ts": "dc5ad893e8d895e5eb7b76102c9c0f045569c839ed8d7679b72d24965dbfaf8f",
+    "packages/ai/src/providers/prompt-cache.ts": "d91900005c5a146e33b3276d02100a0da3dfe57f718301fc77c12cad23e8329d",
+    "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "plain",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "reasoning-default",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"none\"}}"
+      }
+    },
+    {
+      "id": "empty-system",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "user-parts",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "a"
+              },
+              {
+                "type": "text",
+                "text": "😀 b\n\"c\""
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": "second"
+          },
+          {
+            "role": "user",
+            "content": []
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"a\"},{\"type\":\"input_text\",\"text\":\"😀 b\\n\\\"c\\\"\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"second\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "user-empty-text-part",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "max-tokens",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"max_output_tokens\":64}"
+      }
+    },
+    {
+      "id": "max-tokens-zero",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 0
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "temperature",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "temperature": 0.5
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"temperature\":0.5}"
+      }
+    },
+    {
+      "id": "temperature-zero",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "temperature": 0
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"temperature\":0}"
+      }
+    },
+    {
+      "id": "temperature-negative-zero",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "temperature": 0
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"temperature\":0}"
+      }
+    },
+    {
+      "id": "temperature-exponent",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "temperature": 1e+21
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"temperature\":1e+21}"
+      }
+    },
+    {
+      "id": "service-tier-priority",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "serviceTier": "priority"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"service_tier\":\"priority\"}"
+      }
+    },
+    {
+      "id": "service-tier-flex",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "serviceTier": "flex"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"service_tier\":\"flex\"}"
+      }
+    },
+    {
+      "id": "service-tier-auto",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "serviceTier": "auto"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"service_tier\":\"auto\"}"
+      }
+    },
+    {
+      "id": "tools",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "write",
+            "description": "",
+            "properties": {},
+            "required": []
+          },
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Edit",
+            "description": "Edit",
+            "required": [
+              "b",
+              "10"
+            ],
+            "properties": {
+              "2": {},
+              "10": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "b": {
+                "type": "object",
+                "required": null,
+                "properties": {
+                  "z": {},
+                  "y": {
+                    "enum": [
+                      1,
+                      0,
+                      1e+21,
+                      0.1
+                    ]
+                  }
+                }
+              },
+              "a": {
+                "type": "string"
+              },
+              "é": {},
+              "😀": {}
+            }
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"Edit\",\"description\":\"Edit\",\"parameters\":{\"properties\":{\"2\":{},\"10\":{\"minimum\":0,\"type\":\"integer\"},\"a\":{\"type\":\"string\"},\"b\":{\"properties\":{\"y\":{\"enum\":[1,0,1e+21,0.1]},\"z\":{}},\"type\":\"object\"},\"é\":{},\"😀\":{}},\"required\":[\"b\",\"10\"],\"type\":\"object\"},\"strict\":false},{\"type\":\"function\",\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false},{\"type\":\"function\",\"name\":\"write\",\"description\":\"\",\"parameters\":{\"properties\":{},\"required\":[],\"type\":\"object\"},\"strict\":false}]}"
+      }
+    },
+    {
+      "id": "tools-empty",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "effort-high",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"high\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-ultra",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "ultra"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"ultra\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "high": "xhigh"
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"xhigh\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-map-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "low": null
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "low"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"low\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "summary-only",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningSummary": "detailed"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"medium\",\"summary\":\"detailed\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-summary",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "minimal",
+        "reasoningSummary": "concise"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"minimal\",\"summary\":\"concise\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-summary-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "medium",
+        "reasoningSummary": null
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "effort-non-reasoning",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "high",
+        "reasoningSummary": "auto"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "off-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "off": null
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "off-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "off": "minimal"
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"minimal\"}}"
+      }
+    },
+    {
+      "id": "off-empty",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "off": ""
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"\"}}"
+      }
+    },
+    {
+      "id": "off-null-with-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": true,
+        "thinkingLevelMap": {
+          "off": null
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false,\"reasoning\":{\"effort\":\"high\",\"summary\":\"auto\"},\"include\":[\"reasoning.encrypted_content\"]}"
+      }
+    },
+    {
+      "id": "session-short",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "sess-1",
+          "x-client-request-id": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-none",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "cacheRetention": "none",
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "session-empty",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": ""
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-no-id-header",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "compat": {
+          "sendSessionIdHeader": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "sess-1"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "x-client-request-id": "sess-1"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"sess-1\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-long-clamped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "x-client-request-id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"store\":false}"
+      }
+    },
+    {
+      "id": "session-internal-space",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "a b\tc"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "a b\tc",
+          "x-client-request-id": "a b\tc"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"a b\\tc\",\"store\":false}"
+      }
+    },
+    {
+      "id": "retention-long-default",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "cacheRetention": "long",
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"s\",\"prompt_cache_retention\":\"24h\",\"store\":false}"
+      }
+    },
+    {
+      "id": "retention-long-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "compat": {
+          "supportsLongCacheRetention": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "cacheRetention": "long"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "retention-long-no-session",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "cacheRetention": "long"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_retention\":\"24h\",\"store\":false}"
+      }
+    },
+    {
+      "id": "content-key",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"omk-1m9qkzw1qbpot0\",\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}]}"
+      }
+    },
+    {
+      "id": "content-key-canonical-tools",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read a file\n\"quoted\" 한글",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Edit",
+            "description": "Edit",
+            "required": [
+              "b",
+              "10"
+            ],
+            "properties": {
+              "2": {},
+              "10": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "b": {
+                "type": "object",
+                "required": null,
+                "properties": {
+                  "z": {},
+                  "y": {
+                    "enum": [
+                      1,
+                      0,
+                      1e+21,
+                      0.1
+                    ]
+                  }
+                }
+              },
+              "a": {
+                "type": "string"
+              },
+              "é": {},
+              "😀": {}
+            }
+          }
+        ],
+        "systemPromptCacheBoundary": 9
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"omk-dy4k69ggsnhb\",\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"Edit\",\"description\":\"Edit\",\"parameters\":{\"properties\":{\"2\":{},\"10\":{\"minimum\":0,\"type\":\"integer\"},\"a\":{\"type\":\"string\"},\"b\":{\"properties\":{\"y\":{\"enum\":[1,0,1e+21,0.1]},\"z\":{}},\"type\":\"object\"},\"é\":{},\"😀\":{}},\"required\":[\"b\",\"10\"],\"type\":\"object\"},\"strict\":false},{\"type\":\"function\",\"name\":\"read\",\"description\":\"Read a file\\n\\\"quoted\\\" 한글\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}]}"
+      }
+    },
+    {
+      "id": "content-key-astral",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "😀 cache 한글 tail",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "systemPromptCacheBoundary": 2
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"😀 cache 한글 tail\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"omk-m81vec1a7b2w6\",\"store\":false}"
+      }
+    },
+    {
+      "id": "boundary-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "s",
+        "systemPromptCacheBoundary": null
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "boundary-too-long",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 99
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "bypass",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "s",
+        "systemPromptCacheBoundary": 9,
+        "systemPromptCacheBoundaryBypass": true
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "codex-metadata-false",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "compat": {
+          "sendCodexTurnMetadata": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"s\",\"store\":false}"
+      }
+    },
+    {
+      "id": "openai-host",
+      "input": {
+        "provider": "openai",
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "sessionId": "s"
+      },
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json",
+          "session_id": "s",
+          "x-client-request-id": "s"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"prompt_cache_key\":\"s\",\"store\":false}"
+      }
+    },
+    {
+      "id": "base-trailing-slash",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1/",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    },
+    {
+      "id": "base-root",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid",
+        "model": "synthetic-responses",
+        "reasoning": false,
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/responses",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-responses\",\"input\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Hello\"}]}],\"stream\":true,\"store\":false}"
+      }
+    }
+  ]
+}

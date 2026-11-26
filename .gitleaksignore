@@ -119,3 +119,9 @@ d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat
 d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat:102
 d533b089fddc0b1abc6e77debe7a38653714cc06:test/secret-scanner.test.mjs:github-pat:405
 43915f9683ba03ea61abfac8f4afcbff8b4f0410:scripts/test/release-publish-flow.test.mjs:generic-api-key:192
+c46754472a812b113492f627bf104fe28ee1eb33:native/omk-providers/tests/fixtures/dispatch.json:generic-api-key:9
+c46754472a812b113492f627bf104fe28ee1eb33:native/omk-providers/tests/fixtures/auth.json:generic-api-key:4
+c46754472a812b113492f627bf104fe28ee1eb33:native/omk-providers/tests/fixtures/auth.json:generic-api-key:5
+c46754472a812b113492f627bf104fe28ee1eb33:native/omk-providers/tests/fixtures/auth.json:generic-api-key:6
+c46754472a812b113492f627bf104fe28ee1eb33:native/omk-providers/tests/fixtures/auth.json:generic-api-key:8
+c46754472a812b113492f627bf104fe28ee1eb33:specs/120-rust-core/k1-tool-history.md:generic-api-key:40

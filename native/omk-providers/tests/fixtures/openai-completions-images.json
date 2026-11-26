@@ -1,0 +1,441 @@
+{
+  "schema": "omk.openai-completions-images.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-images-recorder.ts": "5d163a462460e5285bb6441e1c0d030d72f2cd893c53a845973f1d96389acf23",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "vision-only",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": true,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-ordered",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": true,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "앞"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              },
+              {
+                "type": "text",
+                "text": "끝"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"앞\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/webp;base64,not normalized+/=\\n\"}},{\"type\":\"text\",\"text\":\"\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/webp;base64,not normalized+/=\\n\"}},{\"type\":\"text\",\"text\":\"끝\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-literal-marker",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": true,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\" \"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "vision-per-turn",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": true,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,cG5n\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/webp;base64,not normalized+/=\\n\"}}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "text-only",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": false,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "text-ordered",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": false,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "앞"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              },
+              {
+                "type": "text",
+                "text": "끝"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"앞\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"끝\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "text-literal-marker",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": false,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "text",
+                "text": " "
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\" \"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "text-per-turn",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "vision": false,
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "cG5n"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "not normalized+/=\n"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    }
+  ]
+}

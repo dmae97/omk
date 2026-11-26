@@ -1,0 +1,2448 @@
+{
+  "schema": "omk.anthropic-policy.v1",
+  "source": {
+    "scripts/fixtures/anthropic-policy-recorder.ts": "ec5f988bf32b225511f6d4a54138ba6261fc3360f58d9e9ea4b4dc64ad95376d",
+    "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
+    "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
+    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff"
+  },
+  "cases": [
+    {
+      "id": "default",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {}
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "temperature-zero",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "temperature": 0
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"temperature\":0}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "temperature-half",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "temperature": 0.5
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"temperature\":0.5}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "temperature-one",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "temperature": 1
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"temperature\":1}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "temperature-unsupported",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"],\"compat\":{\"supportsTemperature\":false}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "temperature": 0.5
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "temperature-thinking-nonreasoning",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "temperature": 0.5,
+          "thinkingEnabled": true
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-nonreasoning",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "thinkingBudgetTokens": 256
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-default",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-zero-budget",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "thinkingBudgetTokens": 0
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-budget",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "thinkingBudgetTokens": 256
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":256,\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-omitted",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "thinkingDisplay": "omitted"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"omitted\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "thinking-disabled",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": false
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"disabled\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "disabled-unsupported",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"supportsDisabledThinking\":false}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": false
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "disabled-temperature",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": false,
+          "temperature": 0.5
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"temperature\":0.5,\"thinking\":{\"type\":\"disabled\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "enabled-temperature",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "temperature": 0.5
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-default",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-low",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "low"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"low\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-medium",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "medium"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"medium\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-high",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "high"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"high\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-xhigh",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "xhigh"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"xhigh\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-max",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "max"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"summarized\"},\"output_config\":{\"effort\":\"max\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-omitted",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "thinkingDisplay": "omitted",
+          "effort": "high"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"adaptive\",\"display\":\"omitted\"},\"output_config\":{\"effort\":\"high\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "adaptive-disabled",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"],\"compat\":{\"forceAdaptiveThinking\":true}}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": false
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"disabled\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "classic-effort-ignored",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":true,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "thinkingEnabled": true,
+          "effort": "high"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":1024,\"display\":\"summarized\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "metadata",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "metadata": {
+            "user_id": "synthetic-user"
+          }
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"metadata\":{\"user_id\":\"synthetic-user\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "metadata-empty",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "metadata": {
+            "user_id": ""
+          }
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"metadata\":{\"user_id\":\"\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "metadata-unicode",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "metadata": {
+            "user_id": "한글 🌍"
+          }
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"metadata\":{\"user_id\":\"한글 🌍\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "metadata-other-ignored",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [],
+        "options": {
+          "metadata": {
+            "other": "ignored"
+          }
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}]}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "tool-auto",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read synthetic file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "options": {
+          "toolChoice": "auto"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"read\",\"description\":\"Read synthetic file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}],\"tool_choice\":{\"type\":\"auto\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "tool-any",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read synthetic file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "options": {
+          "toolChoice": "any"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"read\",\"description\":\"Read synthetic file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}],\"tool_choice\":{\"type\":\"any\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "tool-none",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read synthetic file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "options": {
+          "toolChoice": "none"
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"read\",\"description\":\"Read synthetic file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}],\"tool_choice\":{\"type\":\"none\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    },
+    {
+      "id": "tool-named",
+      "overlay": "{\"providers\":{\"anthropic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-config\",\"models\":[{\"id\":\"synthetic-policy\",\"reasoning\":false,\"input\":[\"text\"]}]}}}",
+      "provider": "anthropic",
+      "input": {
+        "model": "synthetic-policy",
+        "maxTokens": 64,
+        "system": "Synthetic system",
+        "user": "Hello 🌍",
+        "tools": [
+          {
+            "name": "read",
+            "description": "Read synthetic file",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "options": {
+          "toolChoice": {
+            "type": "tool",
+            "name": "read"
+          }
+        }
+      },
+      "runtime": "faux-runtime",
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-runtime"
+        },
+        "body": "{\"model\":\"synthetic-policy\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"max_tokens\":64,\"stream\":true,\"system\":[{\"type\":\"text\",\"text\":\"Synthetic system\"}],\"tools\":[{\"name\":\"read\",\"description\":\"Read synthetic file\",\"eager_input_streaming\":true,\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}}],\"tool_choice\":{\"type\":\"tool\",\"name\":\"read\"}}"
+      },
+      "events": [
+        {
+          "type": "start"
+        },
+        {
+          "type": "text_start",
+          "contentIndex": 0
+        },
+        {
+          "type": "text_delta",
+          "contentIndex": 0,
+          "delta": "안녕 🌍"
+        },
+        {
+          "type": "text_end",
+          "contentIndex": 0,
+          "content": "안녕 🌍"
+        },
+        {
+          "type": "done",
+          "reason": "stop"
+        }
+      ],
+      "result": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "안녕 🌍"
+          }
+        ],
+        "api": "anthropic-messages",
+        "provider": "anthropic",
+        "model": "synthetic-policy",
+        "stopReason": "stop",
+        "responseId": "msg_synthetic",
+        "usage": {
+          "input": 12,
+          "output": 5,
+          "cacheRead": 3,
+          "cacheWrite": 2,
+          "totalTokens": 22,
+          "cacheWrite1h": 0
+        }
+      },
+      "wire": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_synthetic\",\"usage\":{\"input_tokens\":12,\"output_tokens\":0,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"안녕 🌍\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    }
+  ]
+}

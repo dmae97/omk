@@ -1,0 +1,1233 @@
+{
+  "schema": "omk.anthropic.content.v1",
+  "source": {
+    "scripts/fixtures/anthropic-content-recorder.ts": "35565f2817cf371625eb5f4d79fe65e4087a99c334123f4d31850dfee691350c",
+    "scripts/fixtures/anthropic-content-cases.ts": "cb2a683952b347019808df2ff64ff20b70a1e55ffe938ce0a36b64622f284544",
+    "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
+    "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
+    "packages/ai/src/providers/anthropic-client.ts": "6e6555d8d11e649c571060b5ee1042d6cc68c44d9f9250f99dc803fe725efd82",
+    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "packages/ai/src/providers/anthropic-image-guard.ts": "9ca6ebf22d2f83ca5c8b5daf73c50883f3589ff1c48ecbae6b761e40c937abd6",
+    "node_modules/@anthropic-ai/sdk/package.json": "fcfaedec125d8cdfa6174f2ffae129f0ad34c681cad90a2a9dc9118cd9caecfa"
+  },
+  "projection": {
+    "headersExcluded": [
+      "x-stainless-*",
+      "user-agent"
+    ],
+    "scope": "text-only model user arrays and image downgrade, same-model tool results, API key, cache disabled"
+  },
+  "cases": [
+    {
+      "id": "user-empty-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": []
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-blank-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": " \t\n﻿"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-text-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "First 한글"
+              },
+              {
+                "type": "text",
+                "text": "Second 🌏"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"First 한글\"},{\"type\":\"text\",\"text\":\"Second 🌏\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-whitespace",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": " Keep "
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "\n"
+              },
+              {
+                "type": "text",
+                "text": " Last "
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\" Keep \"},{\"type\":\"text\",\"text\":\" Last \"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-ecma-whitespace",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "﻿"
+              },
+              {
+                "type": "text",
+                "text": " "
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-image",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-adjacent-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/jpeg",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/webp",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-separated-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": "Middle"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"Middle\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-placeholder-before",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-placeholder-after",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": "(image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-blank-between-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"},{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "user-mime-data-ignored",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "application/synthetic",
+                "data": "not base64 🌏"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-empty-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-blank-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": " \t\n﻿"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"\\n \\t\\n﻿\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-text-array",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "First"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "text",
+                "text": "Last 한글"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"First\\n\\nLast 한글\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-image",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-adjacent-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-separated-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": "Middle"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\\nMiddle\\n(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-placeholder-before",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-placeholder-after",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": "(tool image omitted: model does not support images)"
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\\n(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-blank-between-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": ""
+              },
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\\n\\n(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "tool-grouped-images",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              },
+              {
+                "type": "text",
+                "text": "Next"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false},{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\\nNext\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "array-interrupts-tool",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ]
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"No result provided\",\"is_error\":true}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"(image omitted: model does not support images)\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "blank-array-separates-results",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "toolUse"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\",\"input\":{}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_1\",\"content\":\"(tool image omitted: model does not support images)\",\"is_error\":false}]},{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "orphan-image",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "toolResult",
+            "toolCallId": "orphan",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    },
+    {
+      "id": "failed-assistant-image",
+      "input": {
+        "model": "synthetic-anthropic",
+        "maxTokens": 64,
+        "system": "",
+        "user": "Continue",
+        "tools": [],
+        "history": [
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "toolCall",
+                "id": "call_1",
+                "name": "read",
+                "arguments": {}
+              }
+            ],
+            "stopReason": "error"
+          },
+          {
+            "role": "toolResult",
+            "toolCallId": "call_1",
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "data": "c3ludGhldGlj"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/messages",
+        "headers": {
+          "accept": "application/json",
+          "anthropic-beta": "interleaved-thinking-2025-05-14",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "x-api-key": "faux-key"
+        },
+        "body": "{\"model\":\"synthetic-anthropic\",\"messages\":[{\"role\":\"user\",\"content\":\"Continue\"}],\"max_tokens\":64,\"stream\":true}"
+      }
+    }
+  ]
+}

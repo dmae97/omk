@@ -1,0 +1,908 @@
+{
+  "schema": "omk.openai-completions-request.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-recorder.ts": "ae30ce572afd39250a498534fad253f8e86d13600b38907ff403fc4eb903a8a4",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
+    "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
+    "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "basic",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "reasoning-developer",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "reasoning-system",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": false,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "empty-system",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "empty-system-first",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": true
+        },
+        "system": "",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "legacy-fields",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": false,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": false,
+          "maxTokensField": "max_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"max_tokens\":64}"
+      }
+    },
+    {
+      "id": "no-max-tokens",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": []
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "zero-max-tokens",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 0
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false}"
+      }
+    },
+    {
+      "id": "temperature",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "temperature": 0.7
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"temperature\":0.7}"
+      }
+    },
+    {
+      "id": "temperature-zero",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "temperature": 0
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"temperature\":0}"
+      }
+    },
+    {
+      "id": "temperature-small",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "temperature": 1e-7
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"temperature\":1e-7}"
+      }
+    },
+    {
+      "id": "tools-sorted",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "write",
+            "description": "Synthetic write",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ]
+          },
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          {
+            "name": "Read",
+            "description": "Synthetic Read",
+            "properties": "x",
+            "required": []
+          }
+        ],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}},{\"type\":\"function\",\"function\":{\"name\":\"Read\",\"description\":\"Synthetic Read\",\"parameters\":{\"properties\":{},\"required\":[],\"type\":\"object\"},\"strict\":false}},{\"type\":\"function\",\"function\":{\"name\":\"write\",\"description\":\"Synthetic write\",\"parameters\":{\"properties\":{\"content\":{\"type\":\"string\"},\"path\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"],\"type\":\"object\"},\"strict\":false}}]}"
+      }
+    },
+    {
+      "id": "tools-no-strict",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": false,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"}}}]}"
+      }
+    },
+    {
+      "id": "choice-auto",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "auto"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"auto\"}"
+      }
+    },
+    {
+      "id": "choice-none",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "none"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"none\"}"
+      }
+    },
+    {
+      "id": "choice-required",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "required"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"required\"}"
+      }
+    },
+    {
+      "id": "choice-function",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": {
+          "type": "function",
+          "function": {
+            "name": "read"
+          }
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"read\"}}}"
+      }
+    },
+    {
+      "id": "history",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "first"
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "one "
+              },
+              {
+                "type": "text",
+                "text": "  "
+              },
+              {
+                "type": "text",
+                "text": "two"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "block a"
+              },
+              {
+                "type": "text",
+                "text": "block b"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": []
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": " \t"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "﻿"
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": []
+          },
+          {
+            "role": "user",
+            "content": ""
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"content\":\"one two\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"block a\"},{\"type\":\"text\",\"text\":\"block b\"}]},{\"role\":\"assistant\",\"content\":\"\"},{\"role\":\"user\",\"content\":\"\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "base-trailing-slash",
+      "input": {
+        "baseUrl": "https://synthetic.invalid/v1/",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "base-root",
+      "input": {
+        "baseUrl": "https://synthetic.invalid",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "base-loopback-port",
+      "input": {
+        "baseUrl": "http://127.0.0.1:8080/openai/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false
+        },
+        "system": "Synthetic system 한글",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello 🌍"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "http://127.0.0.1:8080/openai/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic system 한글\"},{\"role\":\"user\",\"content\":\"Hello 🌍\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    }
+  ]
+}

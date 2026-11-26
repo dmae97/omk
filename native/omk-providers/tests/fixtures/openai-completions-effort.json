@@ -1,0 +1,1815 @@
+{
+  "schema": "omk.openai-completions-effort.v1",
+  "source": {
+    "scripts/fixtures/openai-completions-effort-recorder.ts": "cd9b62dc151db939deeba35fea7b0058922d8fe9e67c49857e65ccc46034f839",
+    "packages/ai/src/providers/openai-completions.ts": "35213516c93dd6b8bb777a90a8a2b9f2f280a6ef005c12cbeda7f953ba73a658",
+    "packages/ai/src/providers/openai-completions-compat.ts": "455262725e7f9c0b1d3a5782d94d58c78770d9ef6a0f35be8706bd3ce539f182",
+    "node_modules/openai/package.json": "3e84370c189c41e745700f55aa5535e38f6437a48d539d0e9ce02d0554863d9f"
+  },
+  "cases": [
+    {
+      "id": "openai-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"high\"}"
+      }
+    },
+    {
+      "id": "openai-effort-tools",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "auto",
+        "reasoningEffort": "low"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"auto\",\"reasoning_effort\":\"low\"}"
+      }
+    },
+    {
+      "id": "openai-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high",
+        "thinkingLevelMap": {
+          "high": "max-x"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"max-x\"}"
+      }
+    },
+    {
+      "id": "openai-mapped-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high",
+        "thinkingLevelMap": {
+          "high": null
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"high\"}"
+      }
+    },
+    {
+      "id": "openai-off-string",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "none"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"none\"}"
+      }
+    },
+    {
+      "id": "openai-off-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": null
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "openai-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "openai-unsupported-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "none"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "openai-not-reasoning",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "openai-ultra",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "ultra"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"ultra\"}"
+      }
+    },
+    {
+      "id": "openrouter-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "auto",
+        "reasoningEffort": "medium"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"auto\",\"reasoning\":{\"effort\":\"medium\"}}"
+      }
+    },
+    {
+      "id": "openrouter-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "xhigh",
+        "thinkingLevelMap": {
+          "xhigh": "high"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"effort\":\"high\"}}"
+      }
+    },
+    {
+      "id": "openrouter-off-default",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"enabled\":false}}"
+      }
+    },
+    {
+      "id": "openrouter-off-string",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "minimal"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"effort\":\"minimal\"}}"
+      }
+    },
+    {
+      "id": "openrouter-off-none",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "none"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"enabled\":false}}"
+      }
+    },
+    {
+      "id": "openrouter-off-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": null
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "openrouter-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "low"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"effort\":\"low\"}}"
+      }
+    },
+    {
+      "id": "openrouter-not-reasoning",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "openrouter",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "low"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "deepseek-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "deepseek",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "auto",
+        "reasoningEffort": "max"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"auto\",\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":\"max\"}"
+      }
+    },
+    {
+      "id": "deepseek-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "deepseek",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"thinking\":{\"type\":\"enabled\"}}"
+      }
+    },
+    {
+      "id": "deepseek-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "deepseek",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"thinking\":{\"type\":\"disabled\"}}"
+      }
+    },
+    {
+      "id": "deepseek-not-reasoning",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": false,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "deepseek",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"system\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "together-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "together",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "minimal",
+        "thinkingLevelMap": {
+          "minimal": "low"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"enabled\":true},\"reasoning_effort\":\"low\"}"
+      }
+    },
+    {
+      "id": "together-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "together",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "minimal"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"enabled\":true}}"
+      }
+    },
+    {
+      "id": "together-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "together",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"enabled\":false}}"
+      }
+    },
+    {
+      "id": "zai-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "zai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true,\"reasoning_effort\":\"high\"}"
+      }
+    },
+    {
+      "id": "zai-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "zai",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true}"
+      }
+    },
+    {
+      "id": "zai-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "zai",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "none"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":false}"
+      }
+    },
+    {
+      "id": "qwen-effort-generic-host",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true}"
+      }
+    },
+    {
+      "id": "qwen-effort-studio",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [
+          {
+            "name": "read",
+            "description": "Synthetic read",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        ],
+        "maxTokens": 64,
+        "toolChoice": "auto",
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"read\",\"description\":\"Synthetic read\",\"parameters\":{\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"],\"type\":\"object\"},\"strict\":false}}],\"tool_choice\":\"auto\",\"enable_thinking\":true,\"reasoning_effort\":\"high\"}"
+      }
+    },
+    {
+      "id": "qwen-studio-unsupported",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": false
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true}"
+      }
+    },
+    {
+      "id": "qwen-studio-deepseek-minimal",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "deepseek-v4-flash",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "minimal"
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-v4-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true,\"reasoning_effort\":\"low\"}"
+      }
+    },
+    {
+      "id": "qwen-studio-deepseek-minimal-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "deepseek-v4-flash",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "minimal",
+        "thinkingLevelMap": {
+          "minimal": "tiny"
+        }
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-v4-flash\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true,\"reasoning_effort\":\"tiny\"}"
+      }
+    },
+    {
+      "id": "qwen-studio-other-minimal",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "minimal"
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":true,\"reasoning_effort\":\"minimal\"}"
+      }
+    },
+    {
+      "id": "qwen-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"enable_thinking\":false}"
+      }
+    },
+    {
+      "id": "qwen-chat-template-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen-chat-template",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "low"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"chat_template_kwargs\":{\"enable_thinking\":true,\"preserve_thinking\":true}}"
+      }
+    },
+    {
+      "id": "qwen-chat-template-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "qwen-chat-template",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"chat_template_kwargs\":{\"enable_thinking\":false,\"preserve_thinking\":true}}"
+      }
+    },
+    {
+      "id": "string-thinking-effort",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "string-thinking",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high",
+        "thinkingLevelMap": {
+          "high": "deep"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"thinking\":\"deep\"}"
+      }
+    },
+    {
+      "id": "string-thinking-off-default",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "string-thinking",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"thinking\":\"none\"}"
+      }
+    },
+    {
+      "id": "string-thinking-off-string",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "string-thinking",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "low"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"thinking\":\"low\"}"
+      }
+    },
+    {
+      "id": "string-thinking-off-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "string-thinking",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": null
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "ant-ling-mapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "ant-ling",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high",
+        "thinkingLevelMap": {
+          "high": "high"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning\":{\"effort\":\"high\"}}"
+      }
+    },
+    {
+      "id": "ant-ling-unmapped",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "ant-ling",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high"
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "ant-ling-null",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "ant-ling",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "reasoningEffort": "high",
+        "thinkingLevelMap": {
+          "high": null
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64}"
+      }
+    },
+    {
+      "id": "ant-ling-off",
+      "input": {
+        "provider": "synthetic",
+        "baseUrl": "https://synthetic.invalid/v1",
+        "model": "synthetic-completions",
+        "reasoning": true,
+        "compat": {
+          "supportsStore": true,
+          "supportsDeveloperRole": true,
+          "supportsUsageInStreaming": true,
+          "maxTokensField": "max_completion_tokens",
+          "supportsStrictMode": true,
+          "requiresSystemMessageFirst": false,
+          "thinkingFormat": "ant-ling",
+          "supportsReasoningEffort": true
+        },
+        "system": "Synthetic",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello"
+          }
+        ],
+        "tools": [],
+        "maxTokens": 64,
+        "thinkingLevelMap": {
+          "off": "none"
+        }
+      },
+      "request": {
+        "url": "https://synthetic.invalid/v1/chat/completions",
+        "headers": {
+          "accept": "application/json",
+          "authorization": "Bearer faux-key",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"synthetic-completions\",\"messages\":[{\"role\":\"developer\",\"content\":\"Synthetic\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":64,\"reasoning_effort\":\"none\"}"
+      }
+    }
+  ]
+}
