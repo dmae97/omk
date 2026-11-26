@@ -1,10 +1,50 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { getApiProviders } from "omk-ai";
 import type { AuthStorage } from "./auth-storage.ts";
 
 const ABSENT = Symbol("models.json absent");
 const UNREADABLE = Symbol("models.json unreadable");
 const SEPARATOR = Symbol("separator");
+
+interface CachedModelsText {
+	path: string;
+	mtimeNs: bigint;
+	ctimeNs: bigint;
+	size: bigint;
+	ino: bigint;
+	text: string;
+}
+
+let cachedModelsFile: CachedModelsText | undefined;
+
+function readModelsJsonCached(modelsJsonPath: string): string | symbol {
+	try {
+		const st = statSync(modelsJsonPath, { bigint: true });
+		if (
+			cachedModelsFile &&
+			cachedModelsFile.path === modelsJsonPath &&
+			cachedModelsFile.mtimeNs === st.mtimeNs &&
+			cachedModelsFile.ctimeNs === st.ctimeNs &&
+			cachedModelsFile.size === st.size &&
+			cachedModelsFile.ino === st.ino
+		) {
+			return cachedModelsFile.text;
+		}
+		const text = readFileSync(modelsJsonPath, "utf-8");
+		cachedModelsFile = {
+			path: modelsJsonPath,
+			mtimeNs: st.mtimeNs,
+			ctimeNs: st.ctimeNs,
+			size: st.size,
+			ino: st.ino,
+			text,
+		};
+		return text;
+	} catch (error) {
+		cachedModelsFile = undefined;
+		return (error as NodeJS.ErrnoException)?.code === "ENOENT" ? ABSENT : UNREADABLE;
+	}
+}
 
 /**
  * Spec 063: everything `ModelRegistry.refresh()` reads, as `===`-comparable values: the exact models.json text,
@@ -14,11 +54,7 @@ const SEPARATOR = Symbol("separator");
 function refreshInputs(modelsJsonPath: string | undefined, authStorage: AuthStorage): unknown[] {
 	const inputs: unknown[] = [modelsJsonPath ?? ABSENT];
 	if (modelsJsonPath) {
-		try {
-			inputs.push(existsSync(modelsJsonPath) ? readFileSync(modelsJsonPath, "utf-8") : ABSENT);
-		} catch {
-			inputs.push(UNREADABLE);
-		}
+		inputs.push(readModelsJsonCached(modelsJsonPath));
 	}
 	inputs.push(SEPARATOR, ...getApiProviders(), SEPARATOR);
 	for (const provider of authStorage.getOAuthProviders()) {

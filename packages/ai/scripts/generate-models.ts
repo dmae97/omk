@@ -129,8 +129,7 @@ const KIMI_CODING_MODELS_DEV_KEYS = ["kimi-code-plan-global", "kimi-code-plan-cn
 // maxTokens for these ids (131072) comes from models.dev `limit.output`; the Kimi For Coding
 // docs do not state an output limit, so the value is unconfirmed upstream (kept per review).
 const KIMI_CODING_ALWAYS_THINKING_IDS = new Set(["k3.1-pro", "k3.1-pro-highspeed"]);
-const KIMI_CODING_ALWAYS_THINKING_COMPAT = { supportsDisabledThinking: false, supportsTemperature: false } as const;
-
+const KIMI_CODING_ALWAYS_THINKING_COMPAT = { forceAdaptiveThinking: true, supportsDisabledThinking: false, supportsTemperature: false } as const;
 const KIMI_CODING_THINKING_LEVEL_MAP = {
 	off: null,
 	minimal: null,
@@ -138,6 +137,7 @@ const KIMI_CODING_THINKING_LEVEL_MAP = {
 	medium: null,
 	high: "high",
 	xhigh: "xhigh",
+	max: "max",
 } as const;
 
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";

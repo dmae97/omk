@@ -13,8 +13,7 @@ import type { Api, Model, SimpleStreamOptions } from "../src/types.ts";
  */
 const CODING_IDS = ["k3.1-pro", "k3.1-pro-highspeed"] as const;
 const API_IDS = ["kimi-k3.1-pro", "kimi-k3.1-pro-highspeed"] as const;
-const REASONING: SimpleStreamOptions["reasoning"][] = [undefined, "minimal", "low", "medium", "high", "xhigh"];
-
+const REASONING: SimpleStreamOptions["reasoning"][] = [undefined, "minimal", "low", "medium", "high", "xhigh", "max"];
 class PayloadCaptured extends Error {}
 afterEach(() => vi.unstubAllGlobals());
 
@@ -82,6 +81,7 @@ describe("Kimi K3.1 Pro on Kimi For Coding", () => {
 			compat: { supportsDisabledThinking: false, supportsTemperature: false },
 		});
 		expect(getSupportedThinkingLevels(model)).not.toContain("off");
+		expect(getSupportedThinkingLevels(model)).toContain("max");
 	});
 
 	it.each(CODING_IDS.flatMap((id) => REASONING.map((reasoning) => [id, reasoning] as const)))(
@@ -93,7 +93,8 @@ describe("Kimi K3.1 Pro on Kimi For Coding", () => {
 			expect(payload).not.toHaveProperty("temperature");
 			expect(payload).not.toHaveProperty("top_p");
 			expect(payload.thinking).not.toEqual(expect.objectContaining({ type: "disabled" }));
-			if (reasoning !== undefined) expect(payload.thinking).toMatchObject({ type: "enabled" });
+			if (reasoning !== undefined) expect(payload.thinking).toMatchObject({ type: "adaptive" });
+			if (reasoning === "max") expect(payload.output_config).toMatchObject({ effort: "max" });
 		},
 	);
 });

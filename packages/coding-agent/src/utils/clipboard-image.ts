@@ -229,12 +229,27 @@ export async function readClipboardImage(options?: {
 		return null;
 	}
 
+	if (platform === "win32") {
+		try {
+			const native = await readClipboardImageViaNativeClipboard();
+			if (native) return native;
+		} catch {
+			// A loaded addon can still fail to access the Windows clipboard.
+		}
+		const result = await readWindowsClipboardImage(env, platform);
+		if (result.kind === "unavailable") {
+			throw new WindowsClipboardError(
+				`Windows clipboard unavailable (${result.reason}). Try dropping an image file.`,
+			);
+		}
+		return result.kind === "image" ? { bytes: result.bytes, mimeType: result.mimeType } : null;
+	}
 	if (platform !== "linux") {
 		return toSupportedImage(await readClipboardImageViaNativeClipboard());
 	}
 
 	const wsl = isWSL(env, !hasExplicitEnv);
-	const windows = wsl ? await readWindowsClipboardImage(env) : undefined;
+	const windows = wsl ? await readWindowsClipboardImage(env, platform) : undefined;
 	if (windows?.kind === "image") return { bytes: windows.bytes, mimeType: windows.mimeType };
 	if (windows?.kind === "empty") return null;
 	const wayland = isWaylandSession(env);

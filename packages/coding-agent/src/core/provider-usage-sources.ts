@@ -6,6 +6,8 @@ const MINUTE_TTL_MS = 60_000;
 const VISIBLE_USAGE_PROVIDERS = [
 	"openai-codex",
 	"anthropic",
+	"antigravity",
+	"google-proxy",
 	"kimi-coding",
 	"zai",
 	"modelstudio-maas",
@@ -20,6 +22,8 @@ const SOURCES: Readonly<Record<string, SubscriptionUsageSource>> = {
 	"openai-codex": source("CODEX", "codex", [{ provider: "openai-codex", oauthOnly: true }]),
 	anthropic: source("CLAUDE", "claude", [{ provider: "anthropic", oauthOnly: true }], 5 * MINUTE_TTL_MS),
 	"qwen-oauth": source("QWEN", "unavailable", [{ provider: "qwen-oauth", oauthOnly: true }]),
+	antigravity: source("ANTIGRAVITY", "antigravity", [{ provider: "antigravity", oauthOnly: false }]),
+	"google-proxy": source("ANTIGRAVITY", "antigravity", [{ provider: "google-proxy", oauthOnly: false }]),
 	// Model Studio exposes no API-key quota endpoint (console gateway is
 	// session-only), so the token-plan quota rides the official QwenCloud
 	// management CLI, which holds its own OAuth credential.

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, win32 } from "node:path";
 import { PROMPT_ATTACHMENT_LIMITS, type PromptImageMimeType, sniffImageMimeType } from "../core/prompt-attachment.ts";
 
 export type WindowsClipboardResult =
@@ -111,8 +111,20 @@ function decodeBase64Payload(encoded: string, label: string): Buffer {
 }
 
 /** Read only image data. No clipboard writes, temporary screenshots, profiles, or policy bypass. */
-export async function readWindowsClipboardImage(env: NodeJS.ProcessEnv = process.env): Promise<WindowsClipboardResult> {
-	for (const command of ["/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "powershell.exe"]) {
+export async function readWindowsClipboardImage(
+	env: NodeJS.ProcessEnv = process.env,
+	platform: NodeJS.Platform = process.platform,
+): Promise<WindowsClipboardResult> {
+	const commands =
+		platform === "win32"
+			? [
+					win32.join(
+						env.SystemRoot || env.SYSTEMROOT || "C:\\Windows",
+						"System32/WindowsPowerShell/v1.0/powershell.exe",
+					),
+				]
+			: ["/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "powershell.exe"];
+	for (const command of commands) {
 		const result = await readCommand(command, env);
 		if (typeof result !== "string") {
 			if (result.kind === "unavailable" && result.reason === "not-found") continue;

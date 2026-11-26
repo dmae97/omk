@@ -14,6 +14,8 @@ describe("Devin account catalog refreshed 2026-10-13", () => {
 		"claude-sonnet-5-5-medium",
 		"claude-haiku-5-5-medium",
 		"grok-4-7-xhigh",
+		"swe-2-1-max",
+		"swe-2-flash-max",
 	])("includes the server-declared lane %s", (id) => {
 		expect(model(id)).toBeDefined();
 	});
@@ -30,7 +32,7 @@ describe("Devin account catalog refreshed 2026-10-13", () => {
 	});
 
 	it("does not retain unlisted legacy routes or duplicate SWE-2 physical lanes", () => {
-		expect(models).toHaveLength(257);
+		expect(models).toHaveLength(259);
 		expect(new Set(models.map((entry) => entry.id)).size).toBe(models.length);
 		for (const id of [
 			"MODEL_PRIVATE_2",

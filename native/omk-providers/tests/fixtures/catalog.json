@@ -2,7 +2,7 @@
   "schema": "omk.model-overlay.v1",
   "source": {
     "scripts/fixtures/catalog-recorder.ts": "9f4bdd03305282699b57fefaef9811eea8a7dfdf639d91552dbd54131e74b1ee",
-    "packages/ai/src/models.generated.ts": "aea6840952e64f7a2a4f70ee80d457a3bbcd281e78746b213ef94fbaf2595a4e",
+    "packages/ai/src/models.generated.ts": "f2134e37d29eb6fc3692becb10144f237accff857a14ea0f5becbf7d25e7691d",
     "packages/ai/src/models.ts": "5ba2350fc544a9b2e281f714d40e2eeaea179ffb0e1e0aaad246cb09cfb2b333",
     "packages/ai/src/providers/grok-thinking.ts": "f4bc6166052f27deca753c134074125d36b183af0b66bd8b77fc6990fdd1fca2",
     "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff",
@@ -15,7 +15,7 @@
       "overlay": "{}",
       "expected": {
         "invalid": true,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -509,7 +509,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v2/\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"},{\"id\":\"two\",\"maxTokens\":42,\"input\":[\"text\",\"image\"]}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2247,
+        "total": 2249,
         "models": [
           {
             "id": "claude-fable-5",
@@ -1050,7 +1050,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"synthetic-new\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2246,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -1567,7 +1567,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"baseUrl\":\"https://synthetic.invalid/route/V12/\",\"compat\":{\"supportsEagerToolInputStreaming\":false}}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -2089,7 +2089,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"modelOverrides\":{\"claude-fable-5\":{\"name\":\"Synthetic\",\"cost\":{\"output\":7},\"reasoning\":false,\"thinkingLevelMap\":{\"off\":null},\"input\":[\"text\"],\"maxTokens\":32}}}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -2582,7 +2582,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"claude-fable-5\",\"name\":\"Replacement\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -3061,7 +3061,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\",\"name\":\"First\"},{\"id\":\"one\",\"name\":\"Last\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2246,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -3578,7 +3578,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"headers\":{\"x-test\":\"provider\",\"x-extra\":\"literal\"},\"modelOverrides\":{\"claude-fable-5\":{\"headers\":{\"x-test\":\"model\"}}}}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -4072,7 +4072,7 @@
       "overlay": "{\"providers\":{},\"visibility\":{\"providers\":[\"anthropic\"],\"models\":{\"anthropic\":[\"claude-fable-5\"]}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -4506,7 +4506,7 @@
       "overlay": "{// line\n\"providers\":{\"anthropic\":{\"baseUrl\":\"https://synthetic.invalid/v1\",},},}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -5000,7 +5000,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"openai-completions\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2246,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -5517,7 +5517,7 @@
       "overlay": "{\"providers\":{\"grok-oauth-proxy\":{\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"old\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -6011,7 +6011,7 @@
       "overlay": "{",
       "expected": {
         "invalid": true,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -6505,7 +6505,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"broken\",\"maxTokens\":0}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -6999,7 +6999,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"baseUrl\":\"https://synthetic.invalid\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",
@@ -7493,7 +7493,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2245,
+        "total": 2247,
         "models": [
           {
             "id": "claude-fable-5",

@@ -125,7 +125,7 @@ describe("readClipboardImage", () => {
 		const result = await readClipboardImage({ platform: "linux", env });
 		expect(result?.mimeType).toBe("image/png");
 		expect(Array.from(result?.bytes ?? [])).toEqual([4, 5, 6]);
-		expect(mocks.windowsClipboard).toHaveBeenCalledWith(env);
+		expect(mocks.windowsClipboard).toHaveBeenCalledWith(env, "linux");
 		expect(mocks.spawnSync).not.toHaveBeenCalled();
 	});
 

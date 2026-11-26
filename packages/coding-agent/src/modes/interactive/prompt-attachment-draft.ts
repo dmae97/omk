@@ -64,8 +64,12 @@ export class PromptAttachmentDraft {
 		this.host.changed();
 	}
 
-	/** Returns false for ordinary text; never auto-loads paths mixed with prose. */
+	/** Returns false for ordinary text; consumes empty paste frames and file-only drops. */
 	paste(text: string): boolean {
+		if (text === "") {
+			void this.clipboard();
+			return true;
+		}
 		const paths = pastedImagePaths(text);
 		if (!paths) return false;
 		void this.addFiles(paths);

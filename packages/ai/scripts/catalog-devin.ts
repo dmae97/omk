@@ -26,6 +26,8 @@ function swe2LogicalModel(): Model<"devin-agent"> {
  * selected directly by its server-declared UID.
  */
 const FLAT_MODELS: ReadonlyArray<readonly [string, string, number, number, ModelThinkingLevel | false]> = [
+	["swe-2-1-max", "SWE-2.1 Max", 262144, 65536, "max"],
+	["swe-2-flash-max", "SWE-2 Flash Max", 262144, 131072, "max"],
 	["swe-1-7-lightning", "SWE-1.7 Lightning Max", 202752, 96000, "max"],
 	["claude-fable-5-1-medium", "Claude Fable 5.1 Medium", 1000000, 128000, "medium"],
 	["claude-opus-5-5-medium", "Claude Opus 5.5 Medium", 1000000, 128000, "medium"],

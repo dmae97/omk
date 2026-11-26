@@ -17,6 +17,7 @@ import { planFirstRun } from "./first-run.ts";
 import { disposeInteractiveNextSuggestions, installInteractiveNextSuggestions } from "./next-suggestion-interactive.ts";
 import { PromptAttachmentDraft } from "./prompt-attachment-draft.ts";
 import { onThemedOutputStale, scheduleInteractiveStartupDeps } from "./startup-deps.ts";
+import { createInteractiveWorkingLoader, createReadableWorkingIndicator } from "./working-spinner.ts";
 
 export { formatResumeCommand } from "./interactive-resume-command.ts";
 
@@ -130,6 +131,7 @@ import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/cha
 import { copyToClipboard } from "../../utils/clipboard.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
+import { runOpenPathCommand } from "../../utils/open-local-path.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { terminalMarkdownLinks } from "../../utils/terminal-links.ts";
@@ -144,7 +146,7 @@ import { ControlPanelComponent, ControlPanelRightPaneComponent } from "./compone
 import { CONTROL_PANEL_SIDEBAR_WIDTH } from "./components/control-panel-layout.ts";
 import { controlPanelStatusReaders } from "./components/control-panel-runtime-status.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
-import { CustomEditor } from "./components/custom-editor.ts";
+import { CustomEditor, formatEditorPlanCaption } from "./components/custom-editor.ts";
 import { CustomEntryComponent } from "./components/custom-entry.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
 import { DaxnutsComponent } from "./components/daxnuts.ts";
@@ -162,6 +164,7 @@ import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { OAuthAccountSelectorComponent } from "./components/oauth-account-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
+import { createOmkStatusHeader } from "./components/omk-status-header.ts";
 import { createResourceReloadBox } from "./components/resource-reload-box.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionFailureComponent } from "./components/session-failure.ts";
@@ -480,6 +483,8 @@ export class InteractiveMode {
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
+		this.defaultEditor.getPromptLabel = () =>
+			formatEditorPlanCaption(this.footerDataProvider.getExtensionStatuses().get("plan"));
 		this.footer = new FooterComponent(this.session, this.footerDataProvider);
 		this.hybridFooter = hybridFooter(this.footer, this.ui);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
@@ -862,8 +867,12 @@ export class InteractiveMode {
 			this.headerContainer.addChild(this.builtInHeader);
 			this.headerContainer.addChild(new Spacer(1));
 		} else {
-			// Minimal header when silenced
-			this.builtInHeader = new Text("", 0, 0);
+			this.builtInHeader = createOmkStatusHeader(
+				this.version,
+				() => this.session,
+				this.footerDataProvider,
+				() => this.ui.viewportTop === 0,
+			);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
 
@@ -1979,30 +1988,22 @@ export class InteractiveMode {
 	}
 
 	private createWorkingLoader(): Loader {
-		const loader = new Loader(
-			this.ui,
-			(spinner) => theme.fg("accent", spinner),
-			(text) => theme.fg("muted", text),
-			this.getWorkingLoaderMessage(),
-			this.workingIndicatorOptions,
-		);
-		const startedAt = this.workingStartedAt ?? performance.now();
-		loader.setDynamicSuffix(() => {
-			const seconds = Math.max(0, Math.floor((performance.now() - startedAt) / 1000));
-			const parts = [`${seconds}s`, `${keyText("app.interrupt")} interrupt`];
-			if (!this.toolOutputExpanded && this.pendingTools.size > 0) {
-				parts.push(`${keyText("app.tools.expand")} expand tools`);
-			}
-			return theme.fg("dim", ` (${parts.join(" · ")})`);
+		return createInteractiveWorkingLoader({
+			ui: this.ui,
+			theme,
+			message: this.getWorkingLoaderMessage(),
+			indicator: this.workingIndicatorOptions,
+			startedAt: this.workingStartedAt ?? performance.now(),
+			interruptKey: keyText("app.interrupt"),
+			expandKey: keyText("app.tools.expand"),
+			pendingTools: () => this.pendingTools.size,
+			toolOutputExpanded: () => this.toolOutputExpanded,
 		});
-		return loader;
 	}
 
 	private stopWorkingLoader(): void {
-		if (this.loadingAnimation) {
-			this.loadingAnimation.stop();
-			this.loadingAnimation = undefined;
-		}
+		this.loadingAnimation?.stop();
+		this.loadingAnimation = undefined;
 		this.statusContainer.clear();
 	}
 
@@ -2023,7 +2024,7 @@ export class InteractiveMode {
 
 	private setWorkingIndicator(options?: LoaderIndicatorOptions): void {
 		this.workingIndicatorOptions = options;
-		this.loadingAnimation?.setIndicator(options);
+		this.loadingAnimation?.setIndicator(options ?? createReadableWorkingIndicator(theme));
 		this.ui.requestRender();
 	}
 
@@ -2773,7 +2774,7 @@ export class InteractiveMode {
 			}
 		};
 
-		// File-only bracketed pastes attach images; normal text follows the editor's paste path.
+		// Empty paste frames can represent an image paste; nonempty text still follows the editor's paste path.
 		this.defaultEditor.onPaste = (text) => this.attachmentDraft.paste(text);
 		this.defaultEditor.onPasteImage = () => void this.handleClipboardImagePaste();
 	}
@@ -2815,10 +2816,6 @@ export class InteractiveMode {
 		return Array.isArray(model?.input) ? model.input.includes("image") : true;
 	}
 
-	private async handleAttachCommand(argument: string): Promise<void> {
-		await this.attachmentDraft.command(argument);
-	}
-
 	private parseBangInput(text: string): BangInvocation {
 		return parseBangInvocation(text.trim(), {
 			hasSkill: (name) => this.session.resourceLoader.getSkills().skills.some((skill) => skill.name === name),
@@ -2841,6 +2838,8 @@ export class InteractiveMode {
 			if (!text && !hasAttachments) return;
 
 			// Handle commands
+			if (/^\/open(?: |$)/.test(text))
+				return runOpenPathCommand(text, this.session.sessionManager.getCwd(), this.showWarning.bind(this));
 			if (text === "/skills" || text.startsWith("/skills ")) {
 				this.editor.setText("");
 				this.showSkillPicker(text.slice("/skills".length).trim());
@@ -2848,7 +2847,7 @@ export class InteractiveMode {
 			}
 			if (text === "/attach" || text.startsWith("/attach ")) {
 				this.editor.setText("");
-				await this.handleAttachCommand(text.slice("/attach".length).trim());
+				await this.attachmentDraft.command(text.slice("/attach".length).trim());
 				return;
 			}
 			if (text === "/settings") {

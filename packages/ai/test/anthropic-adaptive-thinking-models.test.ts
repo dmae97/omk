@@ -23,6 +23,7 @@ const EXPECTED_CURRENT_ADAPTIVE_THINKING_MODELS = [
 ];
 
 const GATEWAY_DEEPSEEK_EFFORT_ID = /^vercel-ai-gateway\/deepseek\/deepseek-v4\.1-flash(?:-\d{4})?$/;
+const KIMI_ADAPTIVE_THINKING_ID = /^kimi-coding\/k3\.1-pro(?:-highspeed)?$/;
 
 function getAllModels(): Model<Api>[] {
 	return getProviders().flatMap((provider) => getModels(provider) as Model<Api>[]);
@@ -41,7 +42,8 @@ describe("Anthropic adaptive thinking model metadata", () => {
 			flaggedModels.filter(
 				(modelId) =>
 					/(opus[-.]4[-.][678]|opus[-.]5|sonnet[-.]4[-.]6|sonnet[-.]5|haiku[-.]5[-.]5|fable)/.test(modelId) ||
-					GATEWAY_DEEPSEEK_EFFORT_ID.test(modelId),
+					GATEWAY_DEEPSEEK_EFFORT_ID.test(modelId) ||
+					KIMI_ADAPTIVE_THINKING_ID.test(modelId),
 			),
 		);
 	});

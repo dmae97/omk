@@ -214,6 +214,41 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 	});
 
 	it.each([
+		["antigravity", false],
+		["antigravity", true],
+		["google-proxy", false],
+		["google-proxy", true],
+	])("uses a matching %s cache hit even with zero proxy pricing (caps=%s)", (provider, on) => {
+		const proxyModel = {
+			...model,
+			provider,
+			api: "anthropic-messages" as const,
+			id: "gemini-4-neon-xhigh",
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		const final = assistant("Done.", {
+			provider: proxyModel.provider,
+			api: proxyModel.api,
+			model: proxyModel.id,
+			usage: { ...base.finalAssistant.usage, cacheRead: 139851 },
+		});
+		const input = {
+			...base,
+			currentModel: proxyModel,
+			record: { ...record, model: proxyModel },
+			finalAssistant: final,
+			...(on ? { caps: { budget: { deadlineMs: 1000, maxCostUsd: 0.02, maxReasoning: "inherit" as const } } } : {}),
+		};
+		expect(planSuggestion(input).kind).toBe("request");
+		expect(
+			planSuggestion({ ...input, finalAssistant: { ...final, usage: { ...final.usage, cacheRead: 0 } } }).kind,
+		).toBe("skip");
+		expect(
+			planSuggestion({ ...input, record: { ...input.record, options: { cacheRetention: "none" } } }),
+		).toMatchObject({ reason: "no_cache_support" });
+	});
+
+	it.each([
 		["aborted outcome", { outcome: "aborted" as const }, "aborted"],
 		["failed outcome", { outcome: "failed" as const }, "not_completed"],
 		["error turn", { finalAssistant: assistant("", { stopReason: "error" }) }, "error"],

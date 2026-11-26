@@ -301,7 +301,7 @@ export class Editor implements Component, Focusable {
 
 	public onSubmit?: (text: string) => void;
 	public onChange?: (text: string) => void;
-	/** Return true to consume a complete bracketed paste (e.g. dropped image paths). */
+	/** Return true to consume a complete bracketed paste, including empty payloads. */
 	public onPaste?: (text: string) => boolean;
 	public disableSubmit: boolean = false;
 
@@ -590,7 +590,7 @@ export class Editor implements Component, Focusable {
 			const endIndex = this.pasteBuffer.indexOf("\x1b[201~");
 			if (endIndex !== -1) {
 				const pasteContent = this.pasteBuffer.substring(0, endIndex);
-				if (pasteContent.length > 0 && !this.onPaste?.(pasteContent)) {
+				if (!this.onPaste?.(pasteContent) && pasteContent.length > 0) {
 					this.handlePaste(pasteContent);
 				}
 				this.isInPaste = false;

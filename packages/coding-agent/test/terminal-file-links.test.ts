@@ -1,4 +1,4 @@
-import { resetCapabilitiesCache, setCapabilities } from "omk-tui";
+import { resetCapabilitiesCache, setCapabilities, Text } from "omk-tui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { linkPath } from "../src/modes/interactive/tool-renderers/render-utils.ts";
 
@@ -36,5 +36,21 @@ describe("Windows-openable tool paths in WSL", () => {
 		const result = linkPath("report", "보고서 #1.html", "/mnt/c/Users/example/Desktop");
 		// Then it links to the Windows drive and preserves the filename.
 		expect(result).toContain("file:///C:/Users/example/Desktop/%EB%B3%B4%EA%B3%A0%EC%84%9C%20%231.html");
+	});
+	it("keeps the full URL visible when the terminal cannot forward hyperlinks", () => {
+		vi.stubEnv("WSL_DISTRO_NAME", "Ubuntu-24.04");
+		vi.stubEnv("SSH_TTY", "");
+		vi.stubEnv("SSH_CONNECTION", "");
+		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+		const folder = "long folder #".repeat(10);
+		const rendered = linkPath("report…", `${folder}/image.png`, "/projects/app");
+		const url = `file://wsl.localhost/Ubuntu-24.04/projects/app/${encodeURIComponent(folder)}/image.png`;
+		expect(rendered).toBe(`report… (${url})`);
+		expect(
+			new Text(rendered, 0, 0)
+				.render(40)
+				.map((line) => line.trim())
+				.join(""),
+		).toContain(url);
 	});
 });
