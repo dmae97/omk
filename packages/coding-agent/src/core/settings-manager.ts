@@ -188,6 +188,7 @@ export interface Settings {
 	autocompleteMaxVisible?: number; // Max visible items in autocomplete dropdown (default: 5)
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	pinStatusSidebar?: boolean; // Pin the bottom-bar status as a fixed right sidebar (opencode-style rail with MCP list)
+	showFilesSidebar?: boolean; // Show left repository files explorer sidebar by default (Ctrl+B / Alt+B)
 	subscriptionUsageProviders?: string[]; // Global-only usage-rail allowlist; omitted shows all configured groups
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
@@ -1289,6 +1290,14 @@ export class SettingsManager {
 	setPinStatusSidebar(pinned: boolean): void {
 		this.globalSettings.pinStatusSidebar = pinned;
 		this.markModified("pinStatusSidebar");
+		this.save();
+	}
+	getShowFilesSidebar(): boolean {
+		return this.settings.showFilesSidebar ?? process.env.OMK_FILES_SIDEBAR !== "0";
+	}
+	setShowFilesSidebar(show: boolean): void {
+		this.globalSettings.showFilesSidebar = show;
+		this.markModified("showFilesSidebar");
 		this.save();
 	}
 

@@ -120,6 +120,12 @@
 			"note": "Requires an interactive local desktop; RPC does not launch desktop applications"
 		},
 		{
+			"id": "slash.files",
+			"disposition": "refused",
+			"stage": "K7",
+			"description": "Focus, toggle, collapse, or hide the left repository files explorer sidebar"
+		},
+		{
 			"id": "slash.think",
 			"disposition": "refused",
 			"stage": "K6",

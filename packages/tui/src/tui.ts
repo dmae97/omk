@@ -295,7 +295,8 @@ export class TUI extends Container {
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
 	private showHardwareCursor = process.env.OMK_HARDWARE_CURSOR === "1";
 	private clearOnShrink = process.env.OMK_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
-	/** Columns reserved on the right edge for pinned rails; children render at columns - gutter. */
+	/** Columns reserved on the left/right edges for pinned rails; children render inside the remaining width. */
+	private leftGutter: number | ((termWidth: number, termHeight: number) => number) = 0;
 	private rightGutter: number | ((termWidth: number, termHeight: number) => number) = 0;
 	private static readonly MIN_CONTENT_COLUMNS = 20;
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
@@ -363,20 +364,31 @@ export class TUI extends Container {
 	 * visibility rules as the overlay that occupies it. The gutter is clamped
 	 * so content always keeps at least a minimal readable width.
 	 */
+	setLeftGutter(gutter: number | ((termWidth: number, termHeight: number) => number)): void {
+		this.leftGutter = gutter;
+		this.requestRender();
+	}
+
 	setRightGutter(gutter: number | ((termWidth: number, termHeight: number) => number)): void {
 		this.rightGutter = gutter;
 		this.requestRender();
 	}
 
-	/** Content width after the right gutter is reserved for the current terminal size. */
+	/** Content width after left and right gutters are reserved for the current terminal size. */
 	get contentWidth(): number {
-		return this.terminal.columns - this.resolveRightGutter(this.terminal.columns, this.terminal.rows);
+		const { left, right } = this.resolveGutters(this.terminal.columns, this.terminal.rows);
+		return this.terminal.columns - left - right;
 	}
 
-	private resolveRightGutter(termWidth: number, termHeight: number): number {
-		const raw = typeof this.rightGutter === "function" ? this.rightGutter(termWidth, termHeight) : this.rightGutter;
-		if (!Number.isFinite(raw) || raw <= 0) return 0;
-		return Math.min(Math.floor(raw), Math.max(0, termWidth - TUI.MIN_CONTENT_COLUMNS));
+	private resolveGutters(termWidth: number, termHeight: number): { left: number; right: number } {
+		const evalGutter = (g: number | ((w: number, h: number) => number)) => {
+			const raw = typeof g === "function" ? g(termWidth, termHeight) : g;
+			return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+		};
+		const maxTotal = Math.max(0, termWidth - TUI.MIN_CONTENT_COLUMNS);
+		const right = Math.min(evalGutter(this.rightGutter), maxTotal);
+		const left = Math.min(evalGutter(this.leftGutter), Math.max(0, maxTotal - right));
+		return { left, right };
 	}
 
 	setFocus(component: Component | null): void {
@@ -622,10 +634,11 @@ export class TUI extends Container {
 	 * Session-switch and reload reset paths use this to clear transient dialog
 	 * overlays without evicting pinned chrome such as the status rail.
 	 */
-	hideOverlaysExcept(keep?: Component): void {
+	hideOverlaysExcept(...keep: (Component | undefined)[]): void {
+		const keepSet = new Set(keep.filter((c): c is Component => c !== undefined));
 		while (this.overlayStack.length > 0) {
 			const top = this.overlayStack[this.overlayStack.length - 1];
-			if (keep !== undefined && top.component === keep) return;
+			if (keepSet.has(top.component)) return;
 			this.hideOverlay();
 		}
 	}
@@ -1192,10 +1205,12 @@ export class TUI extends Container {
 			return targetScreenRow - currentScreenRow;
 		};
 
-		// Render all components to get new lines. Children render at the content
-		// width (terminal minus the reserved right gutter); overlays composite at
-		// full-terminal coordinates below, so pinned rails own the gutter columns.
-		let newLines = this.resizeResync.track(finalLines ?? this.render(width - this.resolveRightGutter(width, height)));
+		// Render children inside [leftGutter .. width - rightGutter]; overlays composite at full coordinates.
+		const gutters = finalLines === undefined ? this.resolveGutters(width, height) : { left: 0, right: 0 };
+		const renderedLines = finalLines ?? this.render(width - gutters.left - gutters.right);
+		const paddedLines =
+			gutters.left > 0 ? renderedLines.map((line) => `${" ".repeat(gutters.left)}${line}`) : renderedLines;
+		let newLines = this.resizeResync.track(paddedLines);
 
 		// Composite overlays into the rendered lines (before differential compare)
 		if (finalLines === undefined && this.overlayStack.length > 0) {

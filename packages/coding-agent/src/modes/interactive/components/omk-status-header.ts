@@ -29,6 +29,7 @@ export interface OmkStatusHeaderSnapshot {
 	readonly mcpReady: number;
 	readonly mcpTotal: number;
 	readonly herdrActive: boolean;
+	readonly filesSidebarMode?: "open" | "collapsed" | "hidden";
 }
 
 const ANSI_SGR_RE = /\x1b\[[0-9;]*m/g;
@@ -92,7 +93,13 @@ export function renderOmkStatusHeader(snapshot: OmkStatusHeaderSnapshot, width: 
 	const git = snapshot.gitBranch ? s(snapshot.gitBranch) : undefined;
 	const cwd = s(snapshot.cwdLabel || "~");
 
-	const title = `${theme.fg("accent", "◉")} ${theme.bold(theme.fg("text", "OMK · STATUS"))}`;
+	const filesChip =
+		snapshot.filesSidebarMode === "open"
+			? `${theme.fg("muted", "◧ Files ◂")}  `
+			: snapshot.filesSidebarMode === "collapsed"
+				? `${theme.fg("dim", "◧ Files ▸")}  `
+				: "";
+	const title = `${filesChip}${theme.fg("accent", "◉")} ${theme.bold(theme.fg("text", "OMK · STATUS"))}`;
 	if (width < 88) {
 		const rightTop = theme.fg("dim", `v${version}`);
 		const segs = [theme.fg("text", modelWithThink), runToken];
@@ -134,7 +141,12 @@ export function renderOmkStatusHeader(snapshot: OmkStatusHeaderSnapshot, width: 
 	const row2RightParts: string[] = [];
 	if (planClean) row2RightParts.push(theme.fg(planClean.includes("(ro)") ? "warning" : "accent", planClean));
 	if (snapshot.herdrActive) row2RightParts.push(theme.fg("dim", "HERDR"));
-	const hints = theme.fg("dim", "/plan · /branch · /resume · ctrl+o details · ctrl+q rail");
+	const hints = theme.fg(
+		"dim",
+		snapshot.filesSidebarMode
+			? "/plan · /branch · /files · ctrl+b files · ctrl+o details · ctrl+q rail"
+			: "/plan · /branch · /resume · ctrl+o details · ctrl+q rail",
+	);
 
 	return [
 		hairlineRule(width, "┌", "┐", title, topRight),
@@ -173,6 +185,7 @@ export function createOmkStatusHeader(
 	getSession: () => AgentSession,
 	footerData: ReadonlyFooterDataProvider,
 	isInViewport: () => boolean,
+	getFilesSidebarMode?: () => "open" | "collapsed" | "hidden",
 ): OmkStatusHeaderComponent {
 	return new OmkStatusHeaderComponent(() => {
 		const session = getSession();
@@ -198,6 +211,7 @@ export function createOmkStatusHeader(
 			mcpReady,
 			mcpTotal: mcpStatuses.length,
 			herdrActive: resolveHerdrConfig() !== undefined,
+			filesSidebarMode: getFilesSidebarMode?.(),
 		};
 	}, isInViewport);
 }

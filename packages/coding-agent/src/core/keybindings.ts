@@ -25,6 +25,8 @@ export interface AppKeybindings {
 	"app.skills.select": true;
 	"app.tools.expand": true;
 	"app.sidebar.toggle": true;
+	"app.files.toggle": true;
+	"app.files.focus": true;
 	"app.thinking.toggle": true;
 	"app.session.toggleNamedFilter": true;
 	"app.editor.external": true;
@@ -93,6 +95,8 @@ export const KEYBINDINGS = {
 		defaultKeys: "ctrl+q",
 		description: "Pin bottom bar as status sidebar",
 	},
+	"app.files.toggle": { defaultKeys: ["ctrl+b", "alt+b"], description: "Toggle left repository files sidebar" },
+	"app.files.focus": { defaultKeys: "alt+e", description: "Focus repository files sidebar" },
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",
