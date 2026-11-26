@@ -42,5 +42,5 @@ github: [dmae97]
 
 # Custom sponsorship URLs
 # Maximum 4 URLs
-# custom:
-#   - "https://your-sponsorship-page.com"
+custom:
+  - "https://adaptorch.com/"
