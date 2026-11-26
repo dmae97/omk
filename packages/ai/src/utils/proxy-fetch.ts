@@ -1,6 +1,13 @@
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
-import { createHttpProxyAgentsForTarget } from "./node-http-proxy.ts";
+function hasConfiguredProxyEnv(): boolean {
+	return Boolean(
+		process.env.http_proxy ||
+			process.env.HTTP_PROXY ||
+			process.env.https_proxy ||
+			process.env.HTTPS_PROXY ||
+			process.env.all_proxy ||
+			process.env.ALL_PROXY,
+	);
+}
 
 function headerRecord(headers: Headers): Record<string, string> {
 	const record: Record<string, string> = {};
@@ -16,6 +23,14 @@ function headerRecord(headers: Headers): Record<string, string> {
  */
 export async function proxyAwareFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
 	const request = input instanceof Request && init === undefined ? input : new Request(input, init);
+	if (!hasConfiguredProxyEnv()) {
+		return fetch(request);
+	}
+	const [{ request: httpRequest }, { request: httpsRequest }, { createHttpProxyAgentsForTarget }] = await Promise.all([
+		import("node:http"),
+		import("node:https"),
+		import("./node-http-proxy.ts"),
+	]);
 	const agents = createHttpProxyAgentsForTarget(request.url);
 	if (!agents) {
 		return fetch(request);

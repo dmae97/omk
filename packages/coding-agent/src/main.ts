@@ -16,7 +16,7 @@ import { buildInitialMessage } from "./cli/initial-message.ts";
 import { attachSessionTransports } from "./cli/mcp-attach.ts";
 import { loadModelContractOrExit } from "./cli/model-contract.ts";
 import { isPackageCliCommand, isPackageDoctorCommand } from "./cli/package-commands.ts";
-import { applyProjectTrustGate, interactiveProjectTrustPrompt } from "./cli/project-trust-gate.ts";
+import { applyCliTrust, isInteractiveTrustSession } from "./cli/project-trust-gate.ts";
 import { isExplicitExtensionDiagnostic, resolveCliPaths } from "./cli/resource-paths.ts";
 import { isQuotaCommand, mayBeRunCommand } from "./cli/subcommand-words.ts";
 import { runInitCli } from "./commands/init-cli.ts";
@@ -670,7 +670,8 @@ export async function main(args: string[], options?: MainOptions) {
 	const resolvedThemePaths = resolveCliPaths(cwd, parsed.themes);
 	const authStorage = AuthStorage.create();
 	// The trust prompt can only be shown before the TUI starts; later session switches withhold instead.
-	let canPromptForProjectTrust = appMode === "interactive";
+	const interactiveTrust = isInteractiveTrustSession(appMode, parsed);
+	let canPromptForProjectTrust = interactiveTrust;
 	const createRuntime: CreateAgentSessionRuntimeFactory = async ({
 		cwd,
 		agentDir,
@@ -679,12 +680,7 @@ export async function main(args: string[], options?: MainOptions) {
 	}) => {
 		// Spec 053: a cloned repo's packages/extensions/shell settings load only once the project is trusted.
 		const settingsManager = SettingsManager.create(cwd, agentDir);
-		const trustDiagnostics = await applyProjectTrustGate({
-			cwd,
-			settingsManager,
-			mode: appMode === "interactive" ? "interactive" : "headless",
-			prompt: canPromptForProjectTrust ? interactiveProjectTrustPrompt(settingsManager) : undefined,
-		});
+		const trustDiagnostics = await applyCliTrust(cwd, settingsManager, interactiveTrust, canPromptForProjectTrust);
 		const services = await createAgentSessionServices({
 			cwd,
 			agentDir,

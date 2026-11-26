@@ -1,7 +1,8 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { findEnvKeys, getProviders } from "omk-ai";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runOnboardDoctorCli } from "../src/commands/onboard-doctor-cli.ts";
 
 describe("omk doctor", () => {
@@ -9,10 +10,16 @@ describe("omk doctor", () => {
 	let agentDir: string;
 
 	beforeEach(() => {
+		for (const provider of getProviders()) {
+			for (const key of findEnvKeys(provider) ?? []) vi.stubEnv(key, "");
+		}
 		root = mkdtempSync(join(tmpdir(), "omk-doctor-"));
 		agentDir = join(root, "agent");
 	});
-	afterEach(() => rmSync(root, { recursive: true, force: true }));
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		rmSync(root, { recursive: true, force: true });
+	});
 
 	const run = async (args: string[], env: Record<string, string | undefined> = { HOME: root }) => {
 		const lines: string[] = [];

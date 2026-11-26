@@ -118,3 +118,25 @@ export async function applyCommandProjectTrustGate(
 	const diagnostics = await applyProjectTrustGate({ cwd, settingsManager, mode: "headless", writeStderr });
 	for (const diagnostic of diagnostics) writeStderr(`Warning: ${diagnostic.message}\n`);
 }
+
+export function isInteractiveTrustSession(
+	appMode: string,
+	parsed: { help?: boolean; listModels?: unknown },
+	tty = Boolean(process.stdin.isTTY && process.stdout.isTTY),
+): boolean {
+	return appMode === "interactive" && !parsed.help && parsed.listModels === undefined && tty;
+}
+
+export function applyCliTrust(
+	cwd: string,
+	settingsManager: Parameters<typeof applyProjectTrustGate>[0]["settingsManager"],
+	interactiveTrust: boolean,
+	canPrompt: boolean,
+) {
+	return applyProjectTrustGate({
+		cwd,
+		settingsManager,
+		mode: interactiveTrust ? "interactive" : "headless",
+		prompt: canPrompt ? interactiveProjectTrustPrompt(settingsManager) : undefined,
+	});
+}

@@ -1,5 +1,8 @@
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { configDefaults, defineConfig } from "vitest/config";
+
+const defaultMaxWorkers = process.env.VITEST_MAX_WORKERS || !tmpdir().startsWith("/mnt/") ? undefined : 4;
 
 const tuiSrcIndex = fileURLToPath(new URL("../tui/src/index.ts", import.meta.url));
 const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
@@ -17,6 +20,7 @@ export default defineConfig({
 		globals: true,
 		environment: "node",
 		testTimeout: 30000,
+		...(defaultMaxWorkers ? { maxWorkers: defaultMaxWorkers } : {}),
 		globalSetup: ["./test/global-setup-home.ts"],
 		setupFiles: ["./test/setup-env.ts"],
 		server: {

@@ -1,4 +1,3 @@
-import { createServer } from "node:http";
 import { oauthErrorHtml, oauthSuccessHtml } from "./oauth-page.ts";
 
 export interface DevinCallback {
@@ -13,6 +12,7 @@ export async function startDevinCallback(state: string, signal: AbortSignal, por
 	const code = new Promise<string | null>((resolve) => {
 		finish = resolve;
 	});
+	const { createServer } = await import("node:http");
 	const server = createServer((req, res) => {
 		let url: URL;
 		try {
