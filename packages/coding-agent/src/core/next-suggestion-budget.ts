@@ -95,6 +95,11 @@ const OBSERVED_ZERO_PRICE_CACHE_ENDPOINTS: ReadonlyArray<{ readonly provider: st
 	{ provider: "openai-codex", api: "openai-codex-responses" },
 	{ provider: "antigravity", api: "anthropic-messages" },
 	{ provider: "google-proxy", api: "anthropic-messages" },
+	{ provider: "kimi-coding", api: "anthropic-messages" },
+	{ provider: "workbuddy", api: "openai-completions" },
+	{ provider: "modelstudio-maas", api: "openai-completions" },
+	{ provider: "zai", api: "openai-completions" },
+	{ provider: "codex-chatgpt-web", api: "openai-responses" },
 ];
 
 export function hasObservedCodexHit(
@@ -105,15 +110,30 @@ export function hasObservedCodexHit(
 	const allowed = OBSERVED_ZERO_PRICE_CACHE_ENDPOINTS.some(
 		(entry) => entry.provider === model.provider && entry.api === model.api,
 	);
+	const modelMatches = final.model === model.id || final.model.startsWith(`${model.id}-`);
 	return (
 		allowed &&
 		final.api === model.api &&
 		final.provider === model.provider &&
-		final.model === model.id &&
+		modelMatches &&
 		options?.cacheRetention !== "none" &&
 		Number.isSafeInteger(final.usage?.cacheRead) &&
 		final.usage.cacheRead > 0
 	);
+}
+
+/** Pick active model's quota window when present; otherwise highest usedPercent across windows. */
+export function quotaPercentFromSnapshot(
+	windows: ReadonlyArray<{ readonly label?: string; readonly usedPercent?: number }>,
+	activeModelId?: string,
+): number | undefined {
+	const matched = activeModelId
+		? windows.filter((w) => w.label === activeModelId || Boolean(w.label?.startsWith(`${activeModelId}-`)))
+		: [];
+	const used = (matched.length > 0 ? matched : windows)
+		.map((w) => w.usedPercent)
+		.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+	return used.length > 0 ? Math.max(...used) : undefined;
 }
 export type CacheCheck = "ok" | "no_cache_support" | "cache_capability_unknown" | "cache_cold";
 

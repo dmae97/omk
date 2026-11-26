@@ -47,6 +47,9 @@ describe("current-work suggestions without task_result", () => {
 	it("uses the latest task snapshot instead of a proposed completed task", () => {
 		expect(propose([todo(true)], "Implement reader.")).toContain("Document parser usage");
 		expect(propose([todo(true), todo(false)], "Implement reader.")).toBeUndefined();
+		expect(propose([todo(true), todo(false)], "Open a PR for the parser changes.")).toBe(
+			"Open a PR for the parser changes.",
+		);
 	});
 	it("suppresses redundant checks only after a successful check, until a new edit or failure", () => {
 		expect(propose([...edit, ...check], "Run npm run check again.")).toBeUndefined();
@@ -114,5 +117,25 @@ describe("current-work suggestions without task_result", () => {
 		// The result arrives after a newer edit: it verifies the old revision only.
 		const late = { role: "toolResult", toolCallId: "2", toolName: "bash", isError: false, content: [] };
 		expect(propose([...edit, ...pending, ...tool("3", "edit", { path: "src/a.ts" }), late], verify)).toBe(verify);
+	});
+
+	it("activeQuotaUsage isolates the active model window and uses a warm snapshot when refresh stalls", async () => {
+		const { activeQuotaUsage } = await import("../src/modes/interactive/next-suggestion-run.ts");
+		const warm = {
+			label: "ANTIGRAVITY",
+			windows: [
+				{ label: "gemini-4-neon-xhigh", usedPercent: 16 },
+				{ label: "gemini-2.5-flash", usedPercent: 95 },
+			],
+		};
+		const session = { state: { model: { provider: "google-proxy", id: "gemini-4-neon" } } } as never;
+		const readerOk = { snapshot: () => warm, read: async () => warm } as never;
+		expect(await activeQuotaUsage(session, readerOk)).toBe(16);
+
+		const readerStalled = {
+			snapshot: () => warm,
+			read: () => new Promise<typeof warm>(() => {}),
+		} as never;
+		expect(await activeQuotaUsage(session, readerStalled, 10)).toBe(16);
 	});
 });

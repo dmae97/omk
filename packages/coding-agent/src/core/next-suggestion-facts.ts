@@ -22,6 +22,7 @@ export interface SuggestionFacts {
 	readonly freshCheck?: boolean;
 	/** null: a task snapshot exists but has no actionable entry. */
 	readonly nextTask?: string | null;
+	readonly completedTasks?: readonly string[];
 	/** Tools whose last result in the run is still an error. */
 	readonly failedTools: readonly string[];
 	/** First line of the unresolved failure, bounded. */
@@ -127,6 +128,7 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 	let revision = 0;
 	let freshCheck = false;
 	let nextTask: string | null | undefined;
+	let completedTasks: string[] | undefined;
 	const lastResult = new Map<string, { readonly error: boolean; readonly text: string }>();
 	const changed = new Set<string>();
 	let failure: string | undefined;
@@ -181,6 +183,9 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 				);
 				const task = ready.find((t) => t.status === "in_progress") ?? ready.find((t) => t.status === "pending");
 				nextTask = task ? boundFact(task.subject) : null;
+				completedTasks = tasks
+					.filter((t) => t?.status === "completed" && typeof t?.subject === "string")
+					.map((t) => boundFact(t.subject));
 			}
 		}
 	}
@@ -196,6 +201,7 @@ export function collectSuggestionFacts(input: CollectFactsInput): SuggestionFact
 		changedPaths: [...changed].slice(0, MAX_FACT_PATHS).map((path) => boundFact(path, 120)),
 		...(freshCheck ? { freshCheck } : {}),
 		...(nextTask !== undefined ? { nextTask } : {}),
+		...(completedTasks?.length ? { completedTasks } : {}),
 		failedTools,
 		...(failure ? { failure } : {}),
 		modelMissing: input.modelMissing === true,

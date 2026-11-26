@@ -53,8 +53,15 @@ export function sanitizeModelTask(raw: string | undefined, facts: SuggestionFact
 	if (suggestionSentences(task).length > 1 && !isSuggestionProse(task)) return undefined;
 	if (task.length < 4 || !/\p{L}/u.test(task)) return undefined;
 	if (/^[[{<`#]/.test(task) || task.includes("[next-task suggestion]")) return undefined;
-	const same = (value: string | undefined) => value !== undefined && value.toLowerCase() === task.toLowerCase();
-	return same(facts.userRequest) ? undefined : task;
+	const norm = (value: string) =>
+		value
+			.trim()
+			.replace(/[.!?。！？]+$/u, "")
+			.toLowerCase();
+	const target = norm(task);
+	if (facts.userRequest !== undefined && facts.userRequest.toLowerCase() === task.toLowerCase()) return undefined;
+	if (facts.completedTasks?.some((done) => norm(done) === target)) return undefined;
+	return task;
 }
 
 function subjectOf(facts: SuggestionFacts, situation: SuggestionSituation, ko: boolean): string {
