@@ -248,6 +248,59 @@ describe("spec 091 stage 1: next-suggestion core", () => {
 		).toMatchObject({ reason: "no_cache_support" });
 	});
 
+	it("matches effort-suffixed proxy responses and zero-price subscription cache hits", () => {
+		const baseProxy = {
+			...model,
+			provider: "google-proxy",
+			api: "anthropic-messages" as const,
+			id: "gemini-4-neon",
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		};
+		const suffixedFinal = assistant("Done.", {
+			provider: "google-proxy",
+			api: "anthropic-messages",
+			model: "gemini-4-neon-xhigh",
+			usage: { ...base.finalAssistant.usage, cacheRead: 435912 },
+		});
+		expect(
+			planSuggestion({
+				...base,
+				currentModel: baseProxy,
+				record: { ...record, model: baseProxy },
+				finalAssistant: suffixedFinal,
+			}).kind,
+		).toBe("request");
+		expect(
+			planSuggestion({
+				...base,
+				currentModel: baseProxy,
+				record: { ...record, model: baseProxy },
+				finalAssistant: { ...suffixedFinal, model: "other-model" },
+			}).kind,
+		).toBe("skip");
+		for (const [provider, api, id] of [
+			["kimi-coding", "anthropic-messages", "k3.1-pro-highspeed"],
+			["workbuddy", "openai-completions", "deepseek-v4.1-flash"],
+			["modelstudio-maas", "openai-completions", "qwen3.8-max"],
+		] as const) {
+			const subModel = { ...model, provider, api, id, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+			const subFinal = assistant("Done.", {
+				provider,
+				api,
+				model: id,
+				usage: { ...base.finalAssistant.usage, cacheRead: 8192 },
+			});
+			expect(
+				planSuggestion({
+					...base,
+					currentModel: subModel,
+					record: { ...record, model: subModel },
+					finalAssistant: subFinal,
+				}).kind,
+			).toBe("request");
+		}
+	});
+
 	it.each([
 		["aborted outcome", { outcome: "aborted" as const }, "aborted"],
 		["failed outcome", { outcome: "failed" as const }, "not_completed"],

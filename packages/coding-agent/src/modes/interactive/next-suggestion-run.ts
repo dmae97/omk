@@ -11,7 +11,11 @@ import {
 	USAGE_CHECK_TIMEOUT_MS,
 } from "../../core/next-suggestion.ts";
 import type { SuggestionCandidateSource } from "../../core/next-suggestion-accept-trace.ts";
-import { isSuggestionCapsEnabled, suggestionBudgetFromEnv } from "../../core/next-suggestion-budget.ts";
+import {
+	isSuggestionCapsEnabled,
+	quotaPercentFromSnapshot,
+	suggestionBudgetFromEnv,
+} from "../../core/next-suggestion-budget.ts";
 import type { ClearReason, DisplayReporter } from "../../core/next-suggestion-display-log.ts";
 import { collectSuggestionFacts, type SuggestionTurnOutcome } from "../../core/next-suggestion-facts.ts";
 import { sanitizeModelTask } from "../../core/next-suggestion-prompt.ts";
@@ -86,8 +90,8 @@ export function composeSuggestion(input: ComposeSuggestionInput): ComposedSugges
 		env: input.env,
 	});
 	if (facts.outcome === "completed" && !facts.failedTools.length) {
-		if (facts.nextTask !== undefined) {
-			const next = sanitizeModelTask(facts.nextTask ?? undefined, facts);
+		if (typeof facts.nextTask === "string") {
+			const next = sanitizeModelTask(facts.nextTask, facts);
 			return next && !facts.freshCheck ? { title: next, prompt: next, source: "local" } : undefined;
 		}
 		if (facts.freshCheck) return undefined;
@@ -119,13 +123,27 @@ export function lastAssistant(messages: readonly unknown[]): AssistantMessage | 
 }
 
 /** Highest used percent across the active provider's quota windows. */
-export async function activeQuotaUsage(session: AgentSession, reader: SubscriptionUsageReader): Promise<QuotaUsage> {
-	const snapshot = await reader.read(session.state.model?.provider ?? "");
-	if (snapshot === undefined) return "no_quota";
-	const used = snapshot.windows
-		.map((window) => window.usedPercent)
-		.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-	return used.length > 0 ? Math.max(...used) : "unavailable";
+export async function activeQuotaUsage(
+	session: AgentSession,
+	reader: SubscriptionUsageReader,
+	warmFallbackMs = 1_500,
+): Promise<QuotaUsage> {
+	const provider = session.state.model?.provider ?? "";
+	const activeId = session.state.model?.id;
+	const prior = reader.snapshot(provider);
+	const priorUsed = prior ? quotaPercentFromSnapshot(prior.windows, activeId) : undefined;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const snapshot =
+		priorUsed !== undefined
+			? await Promise.race([
+					reader.read(provider).catch(() => undefined),
+					new Promise<undefined>((resolve) => {
+						timer = setTimeout(() => resolve(undefined), warmFallbackMs);
+					}),
+				]).finally(() => clearTimeout(timer))
+			: await reader.read(provider);
+	if (snapshot === undefined) return priorUsed ?? "no_quota";
+	return quotaPercentFromSnapshot(snapshot.windows, activeId) ?? priorUsed ?? "unavailable";
 }
 
 /** Outcome of the newest turn in a snapshot nobody settled in front of this controller (startup, resume). */
@@ -167,7 +185,9 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 			...(capsOn ? { caps: { budget: options.budget ?? suggestionBudgetFromEnv(options.env) } } : {}),
 		});
 	let quotaCheckedAtEpochMs = settledAtEpochMs;
-	const show = (extra: Pick<ComposeSuggestionInput, "generation" | "modelText" | "cached">): string | undefined => {
+	const show = (
+		extra: Pick<ComposeSuggestionInput, "generation" | "modelText" | "cached">,
+	): ComposedSuggestion | undefined => {
 		if (outcome === "aborted" || !input.isCurrent() || !input.editorEmpty()) {
 			report?.("skipped", outcome === "aborted" ? "aborted" : !input.isCurrent() ? "stale_turn" : "editor_nonempty");
 			return undefined;
@@ -176,7 +196,7 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 		const composed = composeSuggestion({ session, outcome, canSend, env: options.env, ...extra });
 		if (extra.modelText && !composed?.task) report?.("skipped", "invalid_output");
 		if (composed) input.show(composed, { parentTurnIndex, settledAtEpochMs, quotaCheckedAtEpochMs, report });
-		return composed?.task;
+		return composed;
 	};
 	let plan = makePlan("no_quota");
 	if (plan.kind !== "request") {
@@ -191,7 +211,7 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 		show({ modelText: cached, cached: true });
 		return;
 	}
-	show({});
+	if (show({})?.source === "local") return;
 	const quotaStartedAt = performance.now();
 	const usage = await checkUsage(options);
 	quotaCheckedAtEpochMs = Date.now();
@@ -244,8 +264,8 @@ export async function runSettledSuggestion(input: RunSettledSuggestionInput): Pr
 	const current = session.model;
 	if (plan.caps && (current?.provider !== provider || current?.id !== id)) return report?.("skipped", "model_changed");
 	if (result.outcome !== "shown") report?.("skipped", result.outcome);
-	const task = show(
+	const shown = show(
 		result.text ? { modelText: result.text } : { generation: result.outcome === "shown" ? "empty" : result.outcome },
 	);
-	if (task) input.candidates.store(plan.record, plan.finalAssistant, task);
+	if (shown?.task) input.candidates.store(plan.record, plan.finalAssistant, shown.task);
 }
