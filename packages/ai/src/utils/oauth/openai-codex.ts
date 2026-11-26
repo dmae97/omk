@@ -6,15 +6,18 @@
  */
 
 // NEVER convert to top-level imports - breaks browser/Vite builds
-let _randomBytes: typeof import("node:crypto").randomBytes | null = null;
-let _http: typeof import("node:http") | null = null;
-if (typeof process !== "undefined" && (process.versions?.node || process.versions?.bun)) {
-	import("node:crypto").then((m) => {
-		_randomBytes = m.randomBytes;
-	});
-	import("node:http").then((m) => {
-		_http = m;
-	});
+let _httpPromise: Promise<typeof import("node:http")> | null = null;
+
+function assertNodeRuntime(): void {
+	if (typeof process === "undefined" || (!process.versions?.node && !process.versions?.bun)) {
+		throw new Error("OpenAI Codex OAuth is only available in Node.js environments");
+	}
+}
+
+async function getNodeHttp(): Promise<typeof import("node:http")> {
+	assertNodeRuntime();
+	_httpPromise ??= import("node:http");
+	return _httpPromise;
 }
 
 import { pollOAuthDeviceCodeFlow } from "./device-code.ts";
@@ -74,10 +77,10 @@ type JwtPayload = {
 };
 
 function createState(): string {
-	if (!_randomBytes) {
-		throw new Error("OpenAI Codex OAuth is only available in Node.js environments");
-	}
-	return _randomBytes(16).toString("hex");
+	assertNodeRuntime();
+	const bytes = new Uint8Array(16);
+	globalThis.crypto.getRandomValues(bytes);
+	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function parseAuthorizationInput(input: string): { code?: string; state?: string } {
@@ -334,10 +337,8 @@ type OAuthServerInfo = {
 	waitForCode: () => Promise<{ code: string } | null>;
 };
 
-function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
-	if (!_http) {
-		throw new Error("OpenAI Codex OAuth is only available in Node.js environments");
-	}
+async function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
+	const http = await getNodeHttp();
 
 	let settleWait: ((value: { code: string } | null) => void) | undefined;
 	const waitForCodePromise = new Promise<{ code: string } | null>((resolve) => {
@@ -349,7 +350,7 @@ function startLocalOAuthServer(state: string): Promise<OAuthServerInfo> {
 		};
 	});
 
-	const server = _http.createServer((req, res) => {
+	const server = http.createServer((req, res) => {
 		try {
 			const url = new URL(req.url || "", "http://localhost");
 			if (url.pathname !== "/auth/callback") {

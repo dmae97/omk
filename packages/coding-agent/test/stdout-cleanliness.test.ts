@@ -134,4 +134,13 @@ describe("stdout cleanliness in non-interactive modes", () => {
 		expect(result.stderr).toContain("trust-env=unset");
 		expect(result.stderr).not.toContain("trust-env=1");
 	});
+
+	it("prints --help in an untrusted project without launching the interactive trust TUI", async () => {
+		const result = await runCli(["--help"], {});
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toContain("Usage:");
+		expect(result.stdout).not.toContain("Trust this project");
+		expect(result.stderr).not.toContain("changed 1 package in 471ms");
+	});
 });

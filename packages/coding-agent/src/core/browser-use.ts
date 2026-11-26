@@ -104,7 +104,13 @@ export class BrowserUseAgent extends EventEmitter {
 
 	async execute(task: BrowserTask): Promise<BrowserUseResult> {
 		const pageState = await this.engine.navigate(task.url);
-		this.sessions.set(task.sessionId || "default", pageState);
+		const sessionKey = task.sessionId || "default";
+		if (this.sessions.has(sessionKey)) this.sessions.delete(sessionKey);
+		else if (this.sessions.size >= 64) {
+			const oldest = this.sessions.keys().next().value;
+			if (oldest !== undefined) this.sessions.delete(oldest);
+		}
+		this.sessions.set(sessionKey, pageState);
 		const verification = await this.verifier.verify(task.postconditions ?? [{ kind: "text", pattern: "\\S" }], {
 			currentUrl: pageState.url,
 			text: pageState.text ?? "",

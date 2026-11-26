@@ -7,6 +7,7 @@ import { execSync, spawnSync } from "child_process";
 import { getShellConfig } from "../utils/shell.ts";
 
 // Cache for shell command results (persists for process lifetime)
+const MAX_COMMAND_RESULT_CACHE = 256;
 const commandResultCache = new Map<string, string | undefined>();
 const ENV_VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ENV_VAR_NAME_PREFIX_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
@@ -214,6 +215,10 @@ function executeCommand(commandConfig: string): string | undefined {
 	}
 
 	const result = executeCommandUncached(commandConfig);
+	if (commandResultCache.size >= MAX_COMMAND_RESULT_CACHE) {
+		const oldest = commandResultCache.keys().next().value;
+		if (oldest !== undefined) commandResultCache.delete(oldest);
+	}
 	commandResultCache.set(commandConfig, result);
 	return result;
 }
