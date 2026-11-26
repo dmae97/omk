@@ -773,6 +773,12 @@ Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
 first, run `npm run check` and `npm test` before opening a pull request, and
 report security issues as described in [SECURITY.md](SECURITY.md).
 
+## Sponsor
+
+[AdaptOrch.com](https://adaptorch.com/) sponsors OMK.
+Explore its [plans](https://adaptorch.com/#pricing) to support OMK's sponsor.
+OMK remains [MIT-licensed](LICENSE); an AdaptOrch subscription is not required to use it.
+
 ## Star OMK
 
 If a check-backed “done” is useful to you, a
