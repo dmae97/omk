@@ -17,6 +17,10 @@ export interface PathInputOptions {
 	stripAtPrefix?: boolean;
 	/** Normalize unicode space variants to regular spaces. */
 	normalizeUnicodeSpaces?: boolean;
+	/** Override platform for deterministic WSL path resolution tests. */
+	platform?: NodeJS.Platform;
+	/** Override environment for deterministic WSL path resolution tests. */
+	env?: NodeJS.ProcessEnv;
 }
 
 /**
@@ -75,11 +79,51 @@ export function normalizePath(input: string, options: PathInputOptions = {}): st
 		}
 	}
 
+	const platform = options.platform ?? process.platform;
+	const env = options.env ?? process.env;
+	const wslTranslated = translateWslWindowsPath(normalized, env, platform);
+	if (wslTranslated !== undefined) {
+		return wslTranslated;
+	}
 	if (/^file:\/\//.test(normalized)) {
 		return fileURLToPath(normalized);
 	}
 
 	return normalized;
+}
+
+function decodeUriPath(rawPath: string): string {
+	return decodeURIComponent(rawPath);
+}
+
+function translateWslWindowsPath(input: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string | undefined {
+	const distro = env.WSL_DISTRO_NAME?.trim();
+	if (platform !== "linux" || !distro) return undefined;
+
+	const driveMatch = /^([a-z]):[\\/](.*)$/i.exec(input);
+	if (driveMatch) {
+		const rest = driveMatch[2].replaceAll("\\", "/");
+		return `/mnt/${driveMatch[1].toLowerCase()}/${rest}`;
+	}
+
+	const uncMatch = /^\\\\(?:wsl\.localhost|wsl\$)\\([^\\]+)\\(.*)$/i.exec(input);
+	if (uncMatch) {
+		if (uncMatch[1].toLowerCase() !== distro.toLowerCase()) return undefined;
+		return `/${uncMatch[2].replaceAll("\\", "/")}`;
+	}
+
+	const fileDriveMatch = /^file:\/\/\/([a-z]):\/(.*)$/i.exec(input);
+	if (fileDriveMatch) {
+		return `/mnt/${fileDriveMatch[1].toLowerCase()}/${decodeUriPath(fileDriveMatch[2])}`;
+	}
+
+	const fileWslMatch = /^file:\/\/(?:wsl\.localhost|wsl\$)\/([^/]+)\/(.*)$/i.exec(input);
+	if (fileWslMatch) {
+		if (fileWslMatch[1].toLowerCase() !== distro.toLowerCase()) return undefined;
+		return `/${decodeUriPath(fileWslMatch[2])}`;
+	}
+
+	return undefined;
 }
 
 export function resolvePath(input: string, baseDir: string = process.cwd(), options: PathInputOptions = {}): string {

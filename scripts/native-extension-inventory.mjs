@@ -88,6 +88,7 @@ function inventory() {
 	}));
 	builtins.unshift({ id: "<builtin:command-safety>", envVar: "OMK_COMMAND_SAFETY", discovery: "packages/coding-agent/src/core/resource-loader.ts" }, { id: "<builtin:todo-checklist>", envVar: "OMK_TODO_CHECKLIST", discovery: "packages/coding-agent/src/core/resource-loader.ts" });
 	builtins.push({ id: "<builtin:tencent-memory>", envVar: "OMK_TENCENT_MEMORY", discovery: "packages/coding-agent/src/core/resource-loader.ts" });
+	builtins.push({ id: "<builtin:herdr-agent-state>", envVar: "OMK_HERDR", discovery: "packages/coding-agent/src/core/resource-loader.ts" });
 	return { entries: entries.sort((a, b) => a.id.localeCompare(b.id)), builtins, excluded: excluded.sort((a, b) => a.id.localeCompare(b.id)) };
 }
 

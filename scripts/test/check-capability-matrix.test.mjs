@@ -13,8 +13,8 @@ const fails = (mutate, pattern) => {
 
 test("the committed matrix covers the source inventory with one disposition each", () => {
 	const result = checkCapabilityMatrix(real(), inventory);
-	assert.equal(result.builtinFiles, 25);
-	assert.equal(inventory.builtinFiles.length, 25);
+	assert.equal(result.builtinFiles, 26);
+	assert.equal(inventory.builtinFiles.length, 26);
 	assert.ok(inventory.tools.includes("bash") && inventory.modes.includes("acp"));
 	assert.ok(inventory.slashCommands.length >= 29);
 	assert.ok(result.features > inventory.slashCommands.length);

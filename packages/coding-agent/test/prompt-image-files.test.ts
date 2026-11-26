@@ -40,6 +40,9 @@ describe("image paths in prompt pastes", () => {
 			"file:///tmp/Screen%20Shot.png",
 			"./local.jpg",
 		]);
+		expect(pastedImagePaths("\\\\wsl.localhost\\Ubuntu-24.04\\tmp\\shot.png")).toEqual([
+			"\\\\wsl.localhost\\Ubuntu-24.04\\tmp\\shot.png",
+		]);
 	});
 });
 

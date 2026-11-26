@@ -11,3 +11,8 @@ The original copyright notice and the MIT permission notice are kept in
 LICENSE and apply to this project. Mario Zechner is credited as a
 contributor in the package.json of the packages derived from pi
 (open-multi-agent-kit, omk-ai, omk-tui, omk-agent-core).
+
+OMK bundles the Herdr agent skill (packages/coding-agent/resources/skills/herdr/SKILL.md)
+from Herdr (https://github.com/herdrdev/herdr, commit e8d7d9705a7a2c89cef4dd42079379f05685af87),
+licensed under the Apache License, Version 2.0. The full Apache License 2.0 text is
+included in packages/coding-agent/resources/skills/herdr/LICENSE.

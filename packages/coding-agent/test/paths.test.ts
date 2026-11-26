@@ -121,6 +121,22 @@ describe("resolvePath", () => {
 		expect(pathname).toMatch(/^\/[A-Za-z]:/);
 		expect(resolvePath(pathname, "E:\\project")).toBe(resolve(pathname));
 	});
+
+	it("translates Windows drive, UNC, and file URLs to WSL Linux paths", () => {
+		const wslOpts = { platform: "linux" as const, env: { WSL_DISTRO_NAME: "Ubuntu-24.04" } };
+		expect(normalizePath("C:\\Users\\me\\Screen Shot.png", wslOpts)).toBe("/mnt/c/Users/me/Screen Shot.png");
+		expect(normalizePath("D:/shots/test.jpg", wslOpts)).toBe("/mnt/d/shots/test.jpg");
+		expect(normalizePath("file:///C:/Users/me/Screen%20Shot.png", wslOpts)).toBe("/mnt/c/Users/me/Screen Shot.png");
+		expect(normalizePath("\\\\wsl.localhost\\Ubuntu-24.04\\home\\me\\shot.png", wslOpts)).toBe("/home/me/shot.png");
+		expect(normalizePath("\\\\wsl$\\ubuntu-24.04\\home\\me\\shot.png", wslOpts)).toBe("/home/me/shot.png");
+		expect(normalizePath("file://wsl.localhost/Ubuntu-24.04/home/me/Screen%20Shot.png", wslOpts)).toBe(
+			"/home/me/Screen Shot.png",
+		);
+		// Other WSL distros must not map into this distro's root filesystem.
+		expect(normalizePath("\\\\wsl.localhost\\Debian\\home\\me\\shot.png", wslOpts)).toBe(
+			"\\\\wsl.localhost\\Debian\\home\\me\\shot.png",
+		);
+	});
 });
 
 describe("isLocalPath", () => {

@@ -68,6 +68,7 @@ describe("terminal link resolution", () => {
 		expect(links.resolveFileLink("docs/after.png")).toBe(terminalFileUrl("docs/after.png", root, wsl));
 		expect(links.resolveFileLink("docs/missing.png")).toBeUndefined();
 		expect(links.resolveFileLink("a / b")).toBeUndefined();
+		expect(links.resolveFileLink("docs")).toBe(terminalFileUrl("docs", root, wsl));
 	});
 
 	it("rejects control characters and malformed file URLs without throwing", () => {
