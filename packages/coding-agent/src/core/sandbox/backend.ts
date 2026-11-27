@@ -185,7 +185,7 @@ export function buildBubblewrapArgv(invocation: SandboxInvocation): readonly str
 		}
 	}
 	for (const path of invocation.filesystem.denyWrite) {
-		argv.push("--remount-ro", path);
+		argv.push("--ro-bind", path, path);
 	}
 
 	if (invocation.network.mode === "none") {
