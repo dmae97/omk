@@ -19,6 +19,7 @@ export interface BashOperations {
 			signal?: AbortSignal;
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
+			readOnly?: boolean;
 		},
 	) => Promise<{ exitCode: number | null; signal?: NodeJS.Signals | null }>;
 }

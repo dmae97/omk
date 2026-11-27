@@ -9,6 +9,7 @@ import {
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
+import { toReadOnlySandboxPolicy } from "../plan-host-boundary.ts";
 import { detectSandboxBackend } from "../sandbox/backend.ts";
 import type { SandboxBackendStatus, SandboxPathResolver, SandboxPolicy } from "../sandbox/policy.ts";
 import { buildSandboxedSpawnRequest, type SandboxedSpawnRequest } from "../sandbox/spawn.ts";
@@ -36,7 +37,7 @@ export function createLocalBashOperations(options?: LocalBashOperationsOptions):
 		return detectedBackend;
 	};
 	return {
-		exec: async (command, cwd, { onData, signal, timeout, env }) => {
+		exec: async (command, cwd, { onData, signal, timeout, env, readOnly }) => {
 			const { shell, args } = getShellConfig(options?.shellPath);
 			let spawnCommand = shell;
 			let spawnArgs = [...args, command];
@@ -44,11 +45,12 @@ export function createLocalBashOperations(options?: LocalBashOperationsOptions):
 			let spawnEnv: NodeJS.ProcessEnv = env ?? getShellEnv();
 			if (sandbox) {
 				const backend = resolveBackend();
+				const effectivePolicy = readOnly ? toReadOnlySandboxPolicy(sandbox.policy) : sandbox.policy;
 				const request = buildSandboxedSpawnRequest({
 					argv: [shell, ...args, command],
 					cwd,
 					env: spawnEnv,
-					policy: sandbox.policy,
+					policy: effectivePolicy,
 					backend,
 					resolver: sandbox.resolver,
 				});
