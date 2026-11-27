@@ -24,17 +24,38 @@ function percentile(values, p) {
 	return sorted[index];
 }
 
+const REQUIRED_PROVENANCE_STRINGS = ["modelId", "reasoningEffort", "taskSetDigest"];
+const REQUIRED_PROVENANCE_NUMBERS = ["timeoutMs", "budgetCapUsd"];
+
 function validateProvenance(base, candidate, harness) {
+	if (!base || typeof base !== "object") {
+		throw new RangeError("baseline provenance object is required");
+	}
+	if (!candidate || typeof candidate !== "object") {
+		throw new RangeError(`provenance object is required for harness "${harness}"`);
+	}
+	for (const key of REQUIRED_PROVENANCE_STRINGS) {
+		if (typeof candidate[key] !== "string" || !candidate[key].trim()) {
+			throw new RangeError(`missing required provenance string "${key}" for harness "${harness}"`);
+		}
+	}
+	for (const key of REQUIRED_PROVENANCE_NUMBERS) {
+		if (typeof candidate[key] !== "number" || !Number.isFinite(candidate[key]) || candidate[key] <= 0) {
+			throw new RangeError(`missing required positive provenance number "${key}" for harness "${harness}"`);
+		}
+	}
 	for (const key of PROVENANCE_KEYS) {
-		if (candidate?.[key] !== base?.[key]) {
+		if (candidate[key] !== base[key]) {
 			throw new Error(`provenance mismatch for harness "${harness}" on field "${key}"`);
 		}
 	}
 }
-
 function summarizeHarnessRun(run) {
 	if (!run || typeof run.harness !== "string" || !run.harness.trim()) {
 		throw new RangeError("run.harness must be a non-empty string");
+	}
+	if (typeof run.harnessVersion !== "string" || !run.harnessVersion.trim()) {
+		throw new RangeError(`run.harnessVersion must be a non-empty string for harness "${run.harness}"`);
 	}
 	if (!Array.isArray(run.trials) || run.trials.length === 0) {
 		throw new RangeError(`run "${run.harness}" must contain at least one trial`);
@@ -84,7 +105,16 @@ function summarizeHarnessRun(run) {
 
 	for (const taskId of taskIds) {
 		const trials = byTask.get(taskId).sort((a, b) => a.attempt - b.attempt);
-		if (trials[0].passed) passAt1Count += 1;
+		for (let idx = 0; idx < trials.length; idx += 1) {
+			const expectedAttempt = idx + 1;
+			if (trials[idx].attempt !== expectedAttempt) {
+				throw new RangeError(
+					`task "${taskId}" in harness "${run.harness}" requires contiguous attempts starting at attempt 1 (expected ${expectedAttempt}, got ${trials[idx].attempt})`,
+				);
+			}
+		}
+		const firstAttempt = trials.find((t) => t.attempt === 1);
+		if (firstAttempt?.passed === true) passAt1Count += 1;
 		if (trials.some((t) => t.passed)) passAtKCount += 1;
 		if (trials.every((t) => t.passed)) allKSuccessCount += 1;
 		solvedTrialCount += trials.filter((t) => t.passed).length;
@@ -133,10 +163,8 @@ export function compareSameModelHarnesses(input) {
 
 	for (const run of input.runs) {
 		validateProvenance(baseProvenance, run.provenance, run.harness);
-		if (input.grader !== undefined) {
-			if (input.grader?.independent !== true || !input.grader?.graderId) {
-				throw new Error("independent grader metadata required (independent: true, graderId)");
-			}
+		if (!input.grader || input.grader.independent !== true || typeof input.grader.graderId !== "string" || !input.grader.graderId.trim()) {
+			throw new Error("independent grader metadata required (independent: true, non-empty graderId)");
 		}
 		if (harnesses[run.harness]) throw new Error(`duplicate harness "${run.harness}"`);
 		const { taskIds, summary } = summarizeHarnessRun(run);
