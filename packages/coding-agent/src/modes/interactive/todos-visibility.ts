@@ -59,7 +59,7 @@ export function formatFilesAndMouseHelp(
 		`Files sidebar: ${sidebarMode} (default: on · ${savedNote})`,
 		"  Precedence: project .omk/settings.json showFilesSidebar > global ~/.omk/agent/settings.json showFilesSidebar > OMK_FILES_SIDEBAR=0 > default on.",
 		"  Disable/toggle: Ctrl+B / Alt+B, /files off, /files collapse (session-only), or OMK_FILES_SIDEBAR=0 (when unset in settings.json). Ctrl+B and /files on|off|toggle persist to global settings.json.",
-		`Mouse mode: ${mouseEnabled ? "on" : "off"} (default: on in TTY · Shift+drag selects text)`,
+		`Mouse mode: ${mouseEnabled ? "on" : "off"} (default: on in TTY · drag selects & copies text; Shift+drag uses terminal selection)`,
 		"  Disable/toggle: /files mouse off|on (session-only, not saved) or export OMK_TUI_MOUSE=0 for persistent off.",
 		"Todos panel: Alt+T, /todos hide|show|toggle, or click ☑ Todos ▾/☐ Todos ▸ in the top bar (persisted to showTodos in settings.json; OMK_SHOW_TODOS=0 default off).",
 	].join("\n");
@@ -101,7 +101,7 @@ export function dispatchFilesCommand(target: FilesCommandTarget, arg: string): s
 	}
 	if (sub === "mouse on" || sub === "mouse 1") {
 		target.setMouseMode(true);
-		return "Files sidebar mouse mode on (session-only, not saved; Shift+drag selects text)";
+		return "Files sidebar mouse mode on (session-only, not saved; drag selects & copies text; Shift+drag uses terminal selection)";
 	}
 	if (sub === "help" || sub === "status" || sub === "?") {
 		return formatFilesAndMouseHelp(target.getMode(), target.isMouseEnabled(), target.getSavedShowFilesSidebar());

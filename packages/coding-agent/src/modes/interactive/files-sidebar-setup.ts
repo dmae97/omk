@@ -10,14 +10,9 @@ import {
 	FilesSidebarModel,
 	filesSidebarGutterWidth,
 } from "./components/files-sidebar-model.ts";
-import {
-	enableDefaultProcessMouseMode,
-	handleFilesSidebarMouse,
-	isSgrLeftPress,
-	parseSgrMouse,
-	setProcessMouseMode,
-} from "./components/files-sidebar-mouse.ts";
-import { dispatchFilesCommand, dispatchTodosCommand, handleOmkHeaderMouseClick } from "./todos-visibility.ts";
+import { enableDefaultProcessMouseMode, setProcessMouseMode } from "./components/files-sidebar-mouse.ts";
+import { attachTuiMouseRouting, setupTuiDragSelection } from "./components/tui-drag-selection.ts";
+import { dispatchFilesCommand, dispatchTodosCommand } from "./todos-visibility.ts";
 
 export { runFilesSlashCommand } from "./todos-visibility.ts";
 
@@ -28,6 +23,7 @@ export interface FilesSidebarSetupOptions {
 	readonly getEditor: () => Component;
 	readonly insertTextIntoEditor: (text: string) => void;
 	readonly onStateChange?: () => void;
+	readonly onCopySelection?: (text: string) => void | Promise<void>;
 }
 
 export interface FilesSidebarController {
@@ -105,6 +101,11 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 		getEditor,
 		isSidebarFocused: () => sidebar.focused,
 	});
+	const dragSelection = setupTuiDragSelection({
+		ui,
+		getLeftGutter: reservedLeftGutter,
+		onCopy: options.onCopySelection,
+	});
 
 	ui.showOverlay(sidebar, {
 		anchor: "top-left",
@@ -128,41 +129,23 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 
 	ui.setLeftGutter(reservedLeftGutter);
 
-	ui.addInputListener((data) => {
-		const mouse = parseSgrMouse(data);
-		if (!mouse) return undefined;
-		if (
-			isSgrLeftPress(mouse) &&
-			handleOmkHeaderMouseClick(
-				mouse.col,
-				mouse.row,
-				reservedLeftGutter(ui.terminal.columns, ui.terminal.rows),
-				ui.contentWidth,
-				ui.terminal.rows,
-				model.getMode(),
-				() => controller.toggle(),
-				() => controller.toggleTodos(),
-			)
-		) {
-			return { consume: true };
-		}
-		const consumed = handleFilesSidebarMouse(mouse, {
-			model,
-			termWidth: ui.terminal.columns,
-			termHeight: ui.terminal.rows,
-			treeViewportRows: sidebar.getTreeViewportRows(),
-			onFocusSidebar: () => controller.focus(),
-			onReturnFocus: returnFocusToEditor,
-			onToggleMode: () => controller.toggle(),
-			onInsertPath: insertPath,
-			onRequestRender: () => {
-				onStateChange?.();
-				ui.requestRender();
-			},
-		});
-		return consumed ? { consume: true } : undefined;
+	attachTuiMouseRouting({
+		ui,
+		model,
+		getLeftGutter: reservedLeftGutter,
+		getTreeViewportRows: () => sidebar.getTreeViewportRows(),
+		dragSelection,
+		attachChatWheel: () => chatWheelScroll.attachInputListener(),
+		onToggleFiles: () => controller.toggle(),
+		onToggleTodos: () => controller.toggleTodos(),
+		onFocusSidebar: () => controller.focus(),
+		onReturnFocus: returnFocusToEditor,
+		onInsertPath: insertPath,
+		onRequestRender: () => {
+			onStateChange?.();
+			ui.requestRender();
+		},
 	});
-	chatWheelScroll.attachInputListener();
 
 	const controller: FilesSidebarController = {
 		model,

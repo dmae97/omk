@@ -111,5 +111,13 @@ export {
 	TUI,
 } from "./tui.ts";
 // Utilities
-export { sliceByColumn, stripTerminalSequences, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "./utils.ts";
+export {
+	extractSegments,
+	sliceByColumn,
+	sliceWithWidth,
+	stripTerminalSequences,
+	truncateToWidth,
+	visibleWidth,
+	wrapTextWithAnsi,
+} from "./utils.ts";
 export { WindowedContainer, type WindowedRenderStats } from "./windowed-container.ts";
