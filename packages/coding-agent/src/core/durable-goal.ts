@@ -24,6 +24,7 @@ export interface DurableGoalEvidence {
 	readonly digest: string;
 	readonly capturedAt: string;
 	readonly goalGeneration: string;
+	readonly verifiedBy?: "goal-acceptance";
 }
 
 export const DURABLE_GOAL_CHECKPOINT_SCHEMA_VERSION = "omk.goal.checkpoint.v1" as const;
@@ -72,7 +73,12 @@ export type DurableGoalCommand =
 	| {
 			readonly kind: "attach-evidence";
 			readonly ref: DurableGoalRef;
-			readonly evidence: { readonly id: string; readonly digest: string; readonly capturedAt: string };
+			readonly evidence: {
+				readonly id: string;
+				readonly digest: string;
+				readonly capturedAt: string;
+				readonly verifiedBy?: "goal-acceptance";
+			};
 	  }
 	| { readonly kind: "complete"; readonly ref: DurableGoalRef }
 	| { readonly kind: "clear"; readonly ref: DurableGoalRef };

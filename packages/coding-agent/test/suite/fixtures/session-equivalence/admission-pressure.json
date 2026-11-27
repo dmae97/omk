@@ -3047,10 +3047,11 @@
 				"inspected": 2,
 				"last": {
 					"contextWindow": 8000,
-					"estimatedInputTokens": 976,
+					"estimatedInputTokens": 1152,
 					"reason": "fits",
 					"reservedOutputTokens": 256,
-					"safetyTokens": 800
+					"safetyTokens": 800,
+					"wrapperOverheadTokens": 176
 				},
 				"unmeasured": 0,
 				"wouldReject": 0

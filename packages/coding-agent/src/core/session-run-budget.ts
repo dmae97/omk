@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Agent, StreamFn } from "omk-agent-core";
 import { wrapBudgetStream } from "./budget-stream.ts";
+import { SessionFleetCoordinator } from "./fleet-session-allocator.ts";
 import { requestAdmissionPolicyFromEnv } from "./request-admission-policy.ts";
 import {
 	createRequestAdmissionGuard,
@@ -20,6 +21,7 @@ interface RunBudgetLifecycle {
 	readonly idle?: () => void;
 	/** Spec 102: the owning session's boundary-cause handoff to the request trace. */
 	readonly prefixCauses?: PrefixBoundaryCauseHolder;
+	readonly sessionId?: () => string | undefined;
 }
 
 /** Installs one scoped stream boundary; restores it without overwriting a later owner. */
@@ -34,7 +36,7 @@ export class SessionRunBudget {
 	private cancelledBudget: RunBudget | undefined;
 	private executionCompletion: Promise<void> | undefined;
 	private readonly executionContext = new AsyncLocalStorage<RunBudget>();
-
+	private readonly fleet = new SessionFleetCoordinator();
 	async abortAndJoin(activeRun: boolean, abort: () => Promise<void>): Promise<void> {
 		if (this.current && this.executionContext.getStore() === this.current) {
 			if (activeRun) throw new Error("Cannot compact from the session's own active agent operation");
@@ -99,6 +101,7 @@ export class SessionRunBudget {
 	close(): void {
 		this.disposed = true;
 		this.current?.close();
+		this.fleet.release(this.lifecycle.sessionId?.());
 	}
 
 	async execute(
@@ -134,7 +137,11 @@ export class SessionRunBudget {
 			this.current = scopedBudget;
 			this.admission = undefined;
 			this.admission = createRequestAdmissionGuard(requestAdmissionPolicyFromEnv());
-			wrapped = wrapBudgetStream(source, scopedBudget, this.admission, this.prefixCauses);
+			const sid = this.lifecycle.sessionId?.();
+			this.fleet.admitAndHeartbeat(sid);
+			wrapped = wrapBudgetStream(source, scopedBudget, this.admission, this.prefixCauses, (tokens) => {
+				this.fleet.recordStreamUsage(sid, tokens);
+			});
 			if (sourceAuth !== undefined) {
 				wrappedAuth = async (provider) => {
 					scopedBudget.assertAdmission();

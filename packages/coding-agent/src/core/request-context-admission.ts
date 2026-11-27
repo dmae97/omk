@@ -2,6 +2,11 @@ import type { StreamFn } from "omk-agent-core";
 import type { Api, Context, Model, SimpleStreamOptions } from "omk-ai";
 import { createFallbackTokenCounter, type TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import {
+	evaluateFinalRequestBudget,
+	type FinalRequestBudgetDecision,
+	type FinalRequestBudgetInput,
+} from "./final-request-budget.ts";
+import {
 	decideRequestAdmission,
 	type RequestAdmissionDecision,
 	type RequestAdmissionPolicy,
@@ -11,11 +16,7 @@ import {
 import { projectRequestForAdmission } from "./request-admission-projection.ts";
 import { countTextParts } from "./text-token-estimate.ts";
 
-export {
-	evaluateFinalRequestBudget,
-	type FinalRequestBudgetDecision,
-	type FinalRequestBudgetInput,
-} from "./final-request-budget.ts";
+export { evaluateFinalRequestBudget, type FinalRequestBudgetDecision, type FinalRequestBudgetInput };
 
 export interface RequestAdmissionSnapshot {
 	readonly inspected: number;
@@ -54,10 +55,36 @@ export function createRequestAdmissionGuard(
 					counter.countText(projection.tools, model.id).tokens,
 				];
 				if (tokens.some((n) => !Number.isSafeInteger(n) || n < 0)) throw new TypeError("admission.invalid_count");
-				const total = tokens.reduce((a, b) => a + b, 0) + projection.imageCount * policy.imageTokens;
-				decision = decideRequestAdmission(
+				const verificationReserveTokens = policy.verificationReserveTokens ?? 0;
+				const imageTokens = projection.imageCount * policy.imageTokens;
+				const validWindow = Number.isSafeInteger(model.contextWindow) && model.contextWindow > 0;
+				const validMax = Number.isSafeInteger(model.maxTokens) && model.maxTokens > 0;
+				const validReq =
+					options?.maxTokens === undefined || (Number.isSafeInteger(options.maxTokens) && options.maxTokens > 0);
+				let estimatedInputTokens = tokens.reduce((a, b) => a + b, 0) + imageTokens;
+				let wrapperOverheadTokens = 0;
+				if (validWindow && validMax && validReq) {
+					const completionReserveTokens =
+						options?.reasoning !== undefined && (options.reasoning as string) !== "off"
+							? model.maxTokens
+							: (options?.maxTokens ?? model.maxTokens);
+					const finalBudget = evaluateFinalRequestBudget({
+						contextWindow: model.contextWindow,
+						systemTokens: tokens[0]!,
+						messageTokens: tokens[1]!,
+						messageCount: context.messages.length,
+						toolSchemaTokens: tokens[2]!,
+						toolCount: context.tools?.length ?? 0,
+						imageTokens,
+						completionReserveTokens,
+						verificationReserveTokens,
+					});
+					wrapperOverheadTokens = finalBudget.wrapperOverheadTokens;
+					estimatedInputTokens = finalBudget.payloadTokens + verificationReserveTokens;
+				}
+				const baseDecision = decideRequestAdmission(
 					{
-						estimatedInputTokens: total,
+						estimatedInputTokens,
 						contextWindow: model.contextWindow,
 						modelMaxTokens: model.maxTokens,
 						requestedMaxTokens: options?.maxTokens,
@@ -65,6 +92,11 @@ export function createRequestAdmissionGuard(
 					},
 					policy,
 				);
+				decision = {
+					...baseDecision,
+					...(wrapperOverheadTokens > 0 ? { wrapperOverheadTokens } : {}),
+					...(verificationReserveTokens > 0 ? { verificationReserveTokens } : {}),
+				};
 			} catch (error) {
 				decision = {
 					reason:

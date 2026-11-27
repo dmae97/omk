@@ -37,6 +37,9 @@ export interface SessionMetadata {
 	modified: Date;
 	messageCount: number;
 	firstMessage: string;
+	lastUserMessage?: string;
+	branchCount?: number;
+	lastBranchSummary?: string;
 }
 export interface SessionInfo extends SessionMetadata {
 	allMessagesText: string;
@@ -84,6 +87,9 @@ export async function readSessionInfo(
 		let header: SessionHeader | null = null;
 		let messageCount = 0;
 		let firstMessage = "";
+		let lastUserMessage = "";
+		let lastBranchSummary: string | undefined;
+		const childrenByParent = new Map<string, number>();
 		const allMessages: string[] = [];
 		let name: string | undefined;
 		let lastActivityTime: number | undefined;
@@ -92,7 +98,12 @@ export async function readSessionInfo(
 		try {
 			for await (const line of lines) {
 				if (!line.trim()) continue;
-				let entry: SessionHeader | SessionMessageEntry | SessionInfoEntry | null;
+				let entry:
+					| SessionHeader
+					| SessionMessageEntry
+					| SessionInfoEntry
+					| { type: "branch_summary"; summary?: string }
+					| null;
 				try {
 					entry = JSON.parse(line) as typeof entry;
 				} catch {
@@ -105,17 +116,27 @@ export async function readSessionInfo(
 					continue;
 				}
 				if (entry.type === "session_info") name = entry.name?.trim() || undefined;
+				if (entry.type === "branch_summary") {
+					const summary = (entry as { summary?: unknown }).summary;
+					if (typeof summary === "string" && summary.trim()) lastBranchSummary = summary.trim();
+				}
 				if (entry.type !== "message") continue;
 				messageCount++;
+				if (typeof entry.parentId === "string" && entry.parentId) {
+					childrenByParent.set(entry.parentId, (childrenByParent.get(entry.parentId) ?? 0) + 1);
+				}
 				const activity = getMessageActivityTime(entry);
 				if (typeof activity === "number") lastActivityTime = Math.max(lastActivityTime ?? 0, activity);
 				const message = entry.message;
 				if (!isMessageWithContent(message) || (message.role !== "user" && message.role !== "assistant")) continue;
-				if (options.metadataOnly && (firstMessage || message.role !== "user")) continue;
+				if (options.metadataOnly && message.role !== "user") continue;
 				const text = extractTextContent(message);
 				if (!text) continue;
 				if (!options.metadataOnly) allMessages.push(text);
-				if (!firstMessage && message.role === "user") firstMessage = text;
+				if (message.role === "user") {
+					if (!firstMessage) firstMessage = text;
+					lastUserMessage = text;
+				}
 			}
 		} finally {
 			lines.close();
@@ -140,6 +161,10 @@ export async function readSessionInfo(
 			modified,
 			messageCount,
 			firstMessage: firstMessage || "(no messages)",
+			...(lastUserMessage ? { lastUserMessage } : {}),
+			branchCount:
+				1 + [...childrenByParent.values()].reduce((acc, count) => (count > 1 ? acc + (count - 1) : acc), 0),
+			...(lastBranchSummary ? { lastBranchSummary } : {}),
 		};
 		return options.metadataOnly ? metadata : { ...metadata, allMessagesText: allMessages.join(" ") };
 	} catch {

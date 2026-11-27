@@ -177,7 +177,7 @@ export class GoalAcceptance {
 				{
 					kind: "attach-evidence",
 					ref: latest.ref,
-					evidence: { id: result.receiptId, digest: result.digest, capturedAt },
+					evidence: { id: result.receiptId, digest: result.digest, capturedAt, verifiedBy: "goal-acceptance" },
 				},
 				nextDurableGoalTimestamp(latest, capturedAt),
 			);
@@ -252,11 +252,16 @@ export class GoalAcceptance {
 		return this.complete(store, goal, cwd);
 	}
 
-	/** An approved check, prior trusted receipt, or persisted receipt on disk gates completion across restarts. */
+	/** An approved check, prior trusted receipt, persisted receipt, or journal evidence gates completion across restarts. */
 	private gated(goal: DurableGoalSnapshot, cwd: string): boolean {
 		const key = goalKeyOf(goal);
 		const contract = this.contracts.get(key);
-		if (contract === undefined) return hasPersistedVerificationReceipts(cwd, key);
+		if (contract === undefined) {
+			return (
+				Boolean(goal.evidence?.some((e) => e.verifiedBy === "goal-acceptance")) ||
+				hasPersistedVerificationReceipts(cwd, key)
+			);
+		}
 		if (contract.command !== undefined) return true;
 		for (const receipt of this.trusted.values()) if (receipt.goalKey === key) return true;
 		return false;

@@ -158,8 +158,24 @@ def main(archive, target, version):
         require(run(str(exe), '--version') == version, f'Expected version {version}')
         help_text = run(str(exe), '--help')
         require('Usage:' in help_text and '--mode' in help_text, 'CLI help missing Usage or --mode')
+        # Verify core supported CLI features work standalone without any external JS runtime
+        doctor_res = subprocess.run([str(exe), 'doctor'], cwd=work, env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=25)
+        require('OMK doctor' in doctor_res.stdout or 'default model' in doctor_res.stdout or doctor_res.returncode in (0, 1),
+                f'Standalone doctor failed unexpectedly: rc={doctor_res.returncode}')
+        stats_raw = run(str(exe), 'stats', '--dir', str(profile / 'metrics'), '--json')
+        require('"readStatus":"empty"' in stats_raw.replace(' ', ''), f'Standalone stats JSON unexpected: {stats_raw}')
+        models_out = run(str(exe), '--list-models')
+        require(len(models_out.splitlines()) > 1, 'Standalone --list-models returned no models')
         require(run(*args, '--print') == 'STANDALONE_OK', 'Bundled extension did not complete the offline turn')
-        print(f'{target}: version, help, and offline turn passed', flush=True)
+        json_out = run(*args, '--mode', 'json')
+        require('omk_session_info' in json_out and 'STANDALONE_OK' in json_out,
+                f'Standalone --mode json missing expected events: {json_out[-500:]}')
+        # Verify OMK_CORE_RUNTIME=rust rolls back cleanly to Node at the real startup entry point
+        rust_env = {**env, 'OMK_CORE_RUNTIME': 'rust'}
+        rust_res = subprocess.run([*args, '--print'], cwd=work, env=rust_env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=25)
+        require(rust_res.returncode == 0 and rust_res.stdout.strip() == 'STANDALONE_OK',
+                f'Standalone OMK_CORE_RUNTIME=rust rollback failed: rc={rust_res.returncode} stderr={rust_res.stderr}')
+        print(f'{target}: version, help, doctor, stats, list-models, print, json-mode, and rust-rollback passed', flush=True)
         # shortcut: no Windows PTY coverage; add a verified ConPTY driver to gate its OpenTUI rendering.
         if not is_windows:
             check_pty(args, work, env)

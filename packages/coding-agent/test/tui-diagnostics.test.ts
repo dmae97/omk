@@ -165,6 +165,37 @@ describe("metadata-only diagnostics", () => {
 			expect(statSync(dirname(first)).mode & 0o777).toBe(0o700);
 		}
 	});
+	it("P2-02: links failure event to saved local diagnostic file and distinguishes failedAt, generatedAt, and saved file path", async () => {
+		const { notifyDiagnosticSave } = await import("../src/modes/interactive/tui-diagnostics.ts");
+		const { runtime, root } = fixture();
+		const data = report(runtime);
+		expect(data.termination?.failedAt).toBe(termination.timestamp);
+		expect(data.generatedAt).not.toBe(data.termination?.failedAt);
+
+		const statuses: string[] = [];
+		const errors: string[] = [];
+		const saved = notifyDiagnosticSave(
+			data,
+			(m) => statuses.push(m),
+			(e) => errors.push(e),
+			root,
+		);
+		expect(errors).toEqual([]);
+		expect(saved?.filePath).toContain("diagnostics.json");
+		expect(saved?.failedAt).toBe(termination.timestamp);
+		expect(saved?.generatedAt).toBe(data.generatedAt);
+		expect(statuses[0]).toContain("tool_timeout");
+		expect(statuses[0]).toContain(termination.timestamp);
+		expect(statuses[0]).toContain(data.generatedAt);
+		expect(statuses[0]).toContain(saved!.filePath);
+
+		const viewText = stripVTControlCharacters(
+			createTuiDiagnosticsView(data, runtime, saved!.filePath).render(160).join("\n"),
+		);
+		expect(viewText).toContain(`Report generated: ${data.generatedAt}`);
+		expect(viewText).toContain(`failed at ${termination.timestamp}`);
+		expect(viewText).toContain(saved!.filePath);
+	});
 });
 
 describe("diagnostic view", () => {

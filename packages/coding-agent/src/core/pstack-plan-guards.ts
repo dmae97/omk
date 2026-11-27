@@ -48,9 +48,7 @@ const SAFE_SIMPLE_BINS: ReadonlySet<string> = new Set([
 	"wc",
 	"pwd",
 	"echo",
-	"rg",
 	"grep",
-	"fd",
 	"tree",
 	"stat",
 	"file",
@@ -95,13 +93,39 @@ const SAFE_HERDR_PAIRS: ReadonlySet<string> = new Set([
 	"session:list",
 ]);
 
-const MUTATING_GIT_BRANCH_FLAGS = /\s-(?:[dDmMcC]|delete|move|copy|force)\b/;
-const MUTATING_GIT_OUTPUT_FLAGS = /\s(?:--output(?:=|\s)|--ext-diff\b|--textconv\b)/;
-const MUTATING_FIND_FLAGS = /\s-(?:delete|exec|execdir|ok|okdir|fprint|fprintf|fls)\b/;
-const MUTATING_SORT_FLAGS = /\s(?:-o\b|--output(?:=|\s))/;
+const SAFE_GIT_BRANCH_LIST_FLAGS: ReadonlySet<string> = new Set([
+	"-a",
+	"--all",
+	"-r",
+	"--remotes",
+	"-v",
+	"-vv",
+	"--verbose",
+	"--show-current",
+	"--list",
+	"--no-color",
+	"--color",
+	"--abbrev",
+	"--no-abbrev",
+	"--merged",
+	"--no-merged",
+	"--contains",
+	"--no-contains",
+	"--points-at",
+	"--sort",
+	"--format",
+	"--column",
+	"--no-column",
+	"--ignore-case",
+	"-i",
+]);
+const MUTATING_GIT_OUTPUT_FLAGS = /\s(?:--output(?:=|\s|$)|--ext-diff\b|--textconv\b)/;
+const MUTATING_FIND_FLAGS = /\s-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)\b/;
+const MUTATING_FD_FLAGS = /(?:^|\s)(?:-[xX]\b|-[xX]=|--exec(?:-batch)?(?:=|\s|$))/;
+const MUTATING_RG_FLAGS = /(?:^|\s)--pre(?:-glob)?(?:=|\s|$)/;
+const MUTATING_SORT_FLAGS = /(?:^|\s)(?:-o\S*|--output(?:=|\s|$))/;
 const SHELL_REDIRECT_OR_SUBST =
-	/(?:[\r\n]|>>?|<<|[<>]\(|\$\(|`|(?:^|[^&])&(?:[^&]|$)|\btee\b|\bsed\s+-i\b|\bperl\s+-i\b)/;
-
+	/(?:[\r\n]|>>?|<<|<|\$\(|`|[(){}]|(?:^|[^&])&(?:[^&]|$)|\btee\b|\bsed\s+-i\b|\bperl\s+-i\b)/;
 export function isWriteToolName(toolName: string): boolean {
 	return MUTATING_TOOLS.has(toolName.toLowerCase());
 }
@@ -122,6 +146,8 @@ function isSafeSegment(segment: string): boolean {
 	if (SAFE_SIMPLE_BINS.has(bin)) return true;
 	if (bin === "env") return tokens.length === 1;
 	if (bin === "command") return tokens.length >= 2 && (tokens[1] === "-v" || tokens[1] === "-V");
+	if (bin === "fd") return !MUTATING_FD_FLAGS.test(trimmed);
+	if (bin === "rg") return !MUTATING_RG_FLAGS.test(trimmed);
 	if (bin === "sort") return !MUTATING_SORT_FLAGS.test(trimmed);
 	if (bin === "find") return !MUTATING_FIND_FLAGS.test(trimmed);
 	if (bin === "git") {
@@ -135,7 +161,27 @@ function isSafeSegment(segment: string): boolean {
 		}
 		const sub = tokens[idx] ?? "";
 		if (SAFE_GIT_SUBCOMMANDS.has(sub)) return true;
-		if (sub === "branch") return !MUTATING_GIT_BRANCH_FLAGS.test(trimmed);
+		if (sub === "branch") {
+			const branchArgs = tokens.slice(idx + 1);
+			for (let i = 0; i < branchArgs.length; i += 1) {
+				const arg = branchArgs[i]!;
+				const key = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
+				if (!SAFE_GIT_BRANCH_LIST_FLAGS.has(key)) return false;
+				if (
+					(key === "--contains" ||
+						key === "--no-contains" ||
+						key === "--merged" ||
+						key === "--no-merged" ||
+						key === "--points-at" ||
+						key === "--sort" ||
+						key === "--format") &&
+					!arg.includes("=")
+				) {
+					i += 1;
+				}
+			}
+			return true;
+		}
 		if (sub === "worktree") return tokens[idx + 1] === "list";
 		return false;
 	}

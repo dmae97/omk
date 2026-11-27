@@ -1,12 +1,56 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { verifyArtifactReleaseGate } from "./lib/release-artifact-gate.mjs";
-export { verifyArtifactReleaseGate };
+import { sha256File, verifyArtifactReleaseGate } from "./lib/release-artifact-gate.mjs";
+export { sha256File, verifyArtifactReleaseGate };
+
+/**
+ * Load a verified artifact manifest, compute fresh SHA-256 digests of the candidate
+ * tarballs on disk, and enforce verifyArtifactReleaseGate so only exact artifacts
+ * that passed install + smoke checks can be published.
+ */
+export function assertVerifiedPublishArtifacts({
+	manifestPath,
+	artifactsDir,
+	expectedPackages,
+	requiredPlatforms = ["npm"],
+}) {
+	if (!manifestPath || !existsSync(manifestPath)) {
+		throw new Error(`Missing verified artifact manifest: ${manifestPath ?? "(none)"}`);
+	}
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	const actualDigestsById = {};
+	const verifiedByPackage = new Map();
+	for (const art of manifest?.artifacts ?? []) {
+		if (!art || typeof art.id !== "string") continue;
+		const tarballPath = join(artifactsDir, art.id);
+		if (existsSync(tarballPath)) {
+			actualDigestsById[art.id] = sha256File(tarballPath);
+		}
+		if (typeof art.packageName === "string") {
+			verifiedByPackage.set(art.packageName, { id: art.id, tarballPath, sha256: art.sha256 });
+		}
+	}
+	const verdict = verifyArtifactReleaseGate(manifest, actualDigestsById, requiredPlatforms);
+	if (!verdict.allowed) {
+		throw new Error(`Release artifact gate blocked publish:\n- ${verdict.failures.join("\n- ")}`);
+	}
+	for (const pkg of expectedPackages ?? []) {
+		if (manifest.version && pkg.version && manifest.version !== pkg.version) {
+			throw new Error(`Verified manifest version (${manifest.version}) does not match ${pkg.name}@${pkg.version}`);
+		}
+		const entry = verifiedByPackage.get(pkg.name);
+		if (!entry || !existsSync(entry.tarballPath)) {
+			throw new Error(`Verified artifact missing for ${pkg.name}@${pkg.version}`);
+		}
+	}
+	return verifiedByPackage;
+}
 // npm provenance attestations require a Sigstore-capable CI provider (GitHub
 // Actions). Local publishes fail with EUSAGE "Automatic provenance generation
 // not supported for provider: null", so provenance is attached automatically
@@ -146,12 +190,25 @@ function assertPublishCandidate() {
 		}
 	}
 }
-const unknownArgs = process.argv.slice(2).filter(
-	(arg) => arg !== "--dry-run" && arg !== "--no-provenance" && arg !== "--provenance",
-);
+function flagValue(argv, name) {
+	const idx = argv.indexOf(name);
+	return idx >= 0 && argv[idx + 1] ? resolve(argv[idx + 1]) : undefined;
+}
+const manifestFlag = flagValue(process.argv.slice(2), "--verified-manifest") ?? (process.env.OMK_VERIFIED_MANIFEST_PATH ? resolve(process.env.OMK_VERIFIED_MANIFEST_PATH) : undefined);
+const artifactsDirFlag = flagValue(process.argv.slice(2), "--artifacts-dir") ?? (process.env.OMK_PACKED_ARTIFACTS_DIR ? resolve(process.env.OMK_PACKED_ARTIFACTS_DIR) : undefined);
+const skipValueFlags = new Set(["--verified-manifest", "--artifacts-dir"]);
+const unknownArgs = [];
+for (let i = 2; i < process.argv.length; i++) {
+	const arg = process.argv[i];
+	if (skipValueFlags.has(arg)) {
+		i += 1;
+		continue;
+	}
+	if (arg !== "--dry-run" && arg !== "--no-provenance" && arg !== "--provenance") unknownArgs.push(arg);
+}
 
 if (isMain && unknownArgs.length > 0) {
-	console.error(`Usage: node scripts/publish.mjs [--dry-run] [--no-provenance|--provenance]`);
+	console.error(`Usage: node scripts/publish.mjs [--dry-run] [--no-provenance|--provenance] [--verified-manifest <path> --artifacts-dir <dir>]`);
 	process.exit(1);
 }
 
@@ -246,56 +303,86 @@ if (isMain) {
 	);
 	console.log();
 
-	let tokenChecked = false;
-	for (const pkg of packages) {
-		const version = packageVersions.get(pkg.name);
-		assertBuildOutputExists(pkg.directory);
-		const published = isPublished(pkg.name, version);
+	let tempStageDir;
+	let verifiedTarballs = new Map();
+	try {
+		if (!dryRun) {
+			const expectedPackages = packages.map((pkg) => ({ name: pkg.name, version: packageVersions.get(pkg.name) }));
+			let manifestPath = manifestFlag;
+			let artifactsDir = artifactsDirFlag;
+			if (!manifestPath || !artifactsDir) {
+				tempStageDir = mkdtempSync(join(tmpdir(), "omk-publish-verified-"));
+				artifactsDir = join(tempStageDir, "tarballs");
+				manifestPath = join(tempStageDir, "verified-artifacts.json");
+				console.log("Running packed-npm-smoke to verify exact tarballs before publishing...");
+				run("node", [join("scripts", "packed-npm-smoke.mjs"), "--out-dir", artifactsDir, "--manifest", manifestPath]);
+			}
+			verifiedTarballs = assertVerifiedPublishArtifacts({
+				manifestPath,
+				artifactsDir,
+				expectedPackages,
+				requiredPlatforms: ["npm"],
+			});
+			console.log(`Verified ${verifiedTarballs.size} release tarball(s) against SHA-256 manifest.\n`);
+		}
 
-		if (dryRun) {
+		let tokenChecked = false;
+		for (const pkg of packages) {
+			const version = packageVersions.get(pkg.name);
+			assertBuildOutputExists(pkg.directory);
+			const published = isPublished(pkg.name, version);
+
+			if (dryRun) {
+				if (published) {
+					console.log(`${pkg.name}@${version} is already published; validating package contents only.`);
+				} else {
+					console.log(`${pkg.name}@${version} is not published; validating package contents before publish.`);
+				}
+				validatePack(pkg.directory);
+				console.log();
+				continue;
+			}
+
 			if (published) {
-				console.log(`${pkg.name}@${version} is already published; validating package contents only.`);
-			} else {
-				console.log(`${pkg.name}@${version} is not published; validating package contents before publish.`);
+				const local = { integrity: validatePack(pkg.directory).integrity, gitHead: run("git", ["rev-parse", "HEAD"], { capture: true }).stdout.trim() };
+				const registry = { integrity: registryJson([`${pkg.name}@${version}`, "dist.integrity"]), gitHead: registryJson([`${pkg.name}@${version}`, "gitHead"]) };
+				const decision = decideExistingPublication(local, registry);
+				if (decision !== "reuse") throw new Error(`${pkg.name}@${version} already exists with ${decision} identity; refusing to treat it as this candidate`);
+				console.log(`Reusing ${pkg.name}@${version}: registry identity matches this candidate\n`);
+				continue;
 			}
-			validatePack(pkg.directory);
+
+			// Only before a real publish: a rerun that reuses every package needs no publish rights.
+			if (!tokenChecked) {
+				await assertPublishToken();
+				tokenChecked = true;
+			}
+			const verified = verifiedTarballs.get(pkg.name);
+			if (!verified || sha256File(verified.tarballPath) !== verified.sha256) {
+				throw new Error(`Refusing to publish ${pkg.name}@${version}: verified tarball SHA-256 changed before publish`);
+			}
+			const publishArgs = ["publish", verified.tarballPath, "--access", "public"];
+			if (provenance) {
+				publishArgs.push("--provenance");
+			}
+			publishArgs.push("--ignore-scripts");
+			run("npm", publishArgs);
 			console.log();
-			continue;
 		}
-
-		if (published) {
-			const local = { integrity: validatePack(pkg.directory).integrity, gitHead: run("git", ["rev-parse", "HEAD"], { capture: true }).stdout.trim() };
-			const registry = { integrity: registryJson([`${pkg.name}@${version}`, "dist.integrity"]), gitHead: registryJson([`${pkg.name}@${version}`, "gitHead"]) };
-			const decision = decideExistingPublication(local, registry);
-			if (decision !== "reuse") throw new Error(`${pkg.name}@${version} already exists with ${decision} identity; refusing to treat it as this candidate`);
-			console.log(`Reusing ${pkg.name}@${version}: registry identity matches this candidate\n`);
-			continue;
+		if (!dryRun) {
+			const readLatest = (name) => {
+				try {
+					return registryJson([name, "dist-tags.latest"]);
+				} catch (error) {
+					// A first-ever publish 404s until the registry catches up; other failures stay fatal.
+					if (String(error?.message).includes("E404")) return null;
+					throw error;
+				}
+			};
+			const mismatched = await waitForLatest(versions[0], packages.map((pkg) => pkg.name), readLatest);
+			if (mismatched.length > 0) throw new Error(`npm latest does not match ${versions[0]} for: ${mismatched.join(", ")}`);
 		}
-
-		// Only before a real publish: a rerun that reuses every package needs no publish rights.
-		if (!tokenChecked) {
-			await assertPublishToken();
-			tokenChecked = true;
-		}
-		const publishArgs = ["publish", "--access", "public"];
-		if (provenance) {
-			publishArgs.push("--provenance");
-		}
-		publishArgs.push("--ignore-scripts");
-		run("npm", publishArgs, { cwd: pkg.directory });
-		console.log();
-	}
-	if (!dryRun) {
-		const readLatest = (name) => {
-			try {
-				return registryJson([name, "dist-tags.latest"]);
-			} catch (error) {
-				// A first-ever publish 404s until the registry catches up; other failures stay fatal.
-				if (String(error?.message).includes("E404")) return null;
-				throw error;
-			}
-		};
-		const mismatched = await waitForLatest(versions[0], packages.map((pkg) => pkg.name), readLatest);
-		if (mismatched.length > 0) throw new Error(`npm latest does not match ${versions[0]} for: ${mismatched.join(", ")}`);
+	} finally {
+		if (tempStageDir) rmSync(tempStageDir, { recursive: true, force: true });
 	}
 }

@@ -3,6 +3,7 @@ import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } 
 import { type AgentTool, ToolTerminalError } from "omk-agent-core";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { assertPlanReadOnlyAllowsTool } from "../plan-host-boundary.ts";
 import {
 	EditDiagnosticsRun,
 	ensureEditDiagnosticsSession,
@@ -151,6 +152,7 @@ export function createEditToolDefinition(
 		parameters: editSchema,
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?) {
+			assertPlanReadOnlyAllowsTool(ctx?.sessionManager?.getSessionId?.(), { toolName: "edit", source: "builtin" });
 			const { path, edits } = validateEditInput(input);
 			const absolutePath = resolveToCwd(path, cwd);
 			assertWorkspaceWrite(options?.workspaceRoots, "Edit", path, absolutePath);

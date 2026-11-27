@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext, ExtensionFactory } from "./extensi
 import * as gitBranch from "./git-branch-manager.ts";
 import { runBranchMenu } from "./git-branch-menu.ts";
 import { resolveHerdrConfig } from "./herdr-client.ts";
+import { evaluatePlanToolCallEvent, setPlanReadOnlyActive } from "./plan-host-boundary.ts";
 import * as plan from "./pstack-plan-state.ts";
 
 export interface PstackWorkflowOptions {
@@ -55,10 +56,15 @@ export function createPstackWorkflowExtension(options: PstackWorkflowOptions = {
 			return snap;
 		};
 
+		const syncPlanReadOnlyGate = (ctx: ExtensionContext) => {
+			setPlanReadOnlyActive(ctx.sessionManager?.getSessionId?.(), state.phase === "planning");
+		};
+
 		const enterPlan = (ctx: ExtensionContext, playbook: plan.PstackPlaybook, goal?: string) => {
 			const savedTools = state.phase === "planning" ? state.savedTools : omk.getActiveTools();
 			state = plan.reducePlanState(state, { type: "enter_plan", playbook, goal, savedTools });
 			omk.setActiveTools(plan.filterReadOnlyTools(savedTools));
+			syncPlanReadOnlyGate(ctx);
 			persist();
 			syncPlanUi(ctx);
 			ctx.ui.notify(`Pstack /plan active (${plan.PLAYBOOK_PROFILES[playbook].label}, read-only).`, "info");
@@ -67,6 +73,7 @@ export function createPstackWorkflowExtension(options: PstackWorkflowOptions = {
 		const exitPlan = (ctx: ExtensionContext, notify = true) => {
 			if (state.phase === "planning" && state.savedTools.length > 0) omk.setActiveTools([...state.savedTools]);
 			state = plan.reducePlanState(state, { type: "exit" });
+			syncPlanReadOnlyGate(ctx);
 			persist();
 			syncPlanUi(ctx);
 			if (notify) ctx.ui.notify("Pstack /plan exited. Normal tools restored.", "info");
@@ -77,6 +84,7 @@ export function createPstackWorkflowExtension(options: PstackWorkflowOptions = {
 			const restore = state.savedTools;
 			state = plan.reducePlanState(state, { type: "start_execution", branch: branch ?? lastBranch ?? undefined });
 			if (restore.length > 0) omk.setActiveTools([...restore]);
+			syncPlanReadOnlyGate(ctx);
 			persist();
 			syncPlanUi(ctx);
 			const first = state.phase === "executing" ? state.steps[0]?.text : undefined;
@@ -174,8 +182,13 @@ export function createPstackWorkflowExtension(options: PstackWorkflowOptions = {
 			if (state.phase === "planning" && state.savedTools.length > 0) {
 				omk.setActiveTools(plan.filterReadOnlyTools(state.savedTools));
 			}
+			syncPlanReadOnlyGate(ctx);
 			await syncBranchUi(ctx);
 			syncPlanUi(ctx);
+		});
+
+		omk.on("session_shutdown", (_event, ctx) => {
+			setPlanReadOnlyActive(ctx.sessionManager?.getSessionId?.(), false);
 		});
 
 		omk.on("before_agent_start", () => {
@@ -183,22 +196,7 @@ export function createPstackWorkflowExtension(options: PstackWorkflowOptions = {
 			return content ? { message: { customType: "pstack-plan-context", content, display: false } } : undefined;
 		});
 
-		omk.on("tool_call", (event) => {
-			if (state.phase !== "planning") return undefined;
-			if (plan.isWriteToolName(event.toolName)) {
-				return {
-					block: true,
-					reason: `Pstack /plan mode is read-only. Use /plan run or /plan off before calling ${event.toolName}.`,
-				};
-			}
-			if (plan.isShellToolName(event.toolName)) {
-				const command = String((event.input as { command?: unknown })?.command ?? "");
-				if (!plan.isReadOnlyPlanCommand(command)) {
-					return { block: true, reason: `Pstack /plan mode blocked non-read-only command: ${command}` };
-				}
-			}
-			return undefined;
-		});
+		omk.on("tool_call", (event) => (state.phase === "planning" ? evaluatePlanToolCallEvent(event) : undefined));
 
 		omk.on("turn_end", (event, ctx) => {
 			const text = state.phase === "executing" ? readAssistantText(event.message) : undefined;

@@ -8,6 +8,7 @@ export interface RequestAdmissionPolicy {
 	readonly maxMessages: number;
 	readonly maxTools: number;
 	readonly rejectUnknownWindow: boolean;
+	readonly verificationReserveTokens?: number;
 }
 export const DEFAULT_REQUEST_ADMISSION_POLICY: RequestAdmissionPolicy = Object.freeze({
 	mode: "observe",
@@ -17,6 +18,7 @@ export const DEFAULT_REQUEST_ADMISSION_POLICY: RequestAdmissionPolicy = Object.f
 	maxMessages: 8192,
 	maxTools: 1024,
 	rejectUnknownWindow: false,
+	verificationReserveTokens: 0,
 });
 export function snapshotRequestAdmissionPolicy(input: Partial<RequestAdmissionPolicy> = {}): RequestAdmissionPolicy {
 	const p = { ...DEFAULT_REQUEST_ADMISSION_POLICY, ...input };
@@ -31,13 +33,20 @@ export function snapshotRequestAdmissionPolicy(input: Partial<RequestAdmissionPo
 	for (const value of [p.imageTokens, p.maxSerializedChars, p.maxMessages, p.maxTools]) {
 		if (!Number.isSafeInteger(value) || value <= 0) throw new RangeError("admission.invalid_policy");
 	}
-	return Object.freeze(p);
+	const verificationReserve = p.verificationReserveTokens ?? 0;
+	if (!Number.isSafeInteger(verificationReserve) || verificationReserve < 0) {
+		throw new RangeError("admission.invalid_policy");
+	}
+	return Object.freeze({ ...p, verificationReserveTokens: verificationReserve });
 }
 export function requestAdmissionPolicyFromEnv(): RequestAdmissionPolicy {
 	const raw = process.env.OMK_REQUEST_ADMISSION_MODE;
-	if (raw === undefined) return DEFAULT_REQUEST_ADMISSION_POLICY;
-	if (raw !== "off" && raw !== "observe" && raw !== "enforce") throw new RangeError("admission.invalid_mode");
-	return snapshotRequestAdmissionPolicy({ mode: raw });
+	const rawReserve = process.env.OMK_VERIFICATION_RESERVE_TOKENS?.trim();
+	const verificationReserveTokens = rawReserve ? Number(rawReserve) : 0;
+	if (raw === undefined && !rawReserve) return DEFAULT_REQUEST_ADMISSION_POLICY;
+	const mode = raw === undefined ? DEFAULT_REQUEST_ADMISSION_POLICY.mode : raw;
+	if (mode !== "off" && mode !== "observe" && mode !== "enforce") throw new RangeError("admission.invalid_mode");
+	return snapshotRequestAdmissionPolicy({ mode, verificationReserveTokens });
 }
 export type AdmissionReason = "fits" | "over_capacity" | "unknown_window" | "invalid_input" | "representation_limit";
 export interface RequestAdmissionDecision {
@@ -46,6 +55,8 @@ export interface RequestAdmissionDecision {
 	readonly reservedOutputTokens?: number;
 	readonly safetyTokens?: number;
 	readonly contextWindow?: number;
+	readonly wrapperOverheadTokens?: number;
+	readonly verificationReserveTokens?: number;
 }
 export class RequestInputAdmissionError extends Error {
 	readonly code = "request_admission_denied";

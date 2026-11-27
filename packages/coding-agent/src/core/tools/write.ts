@@ -4,6 +4,7 @@ import { type AgentTool, ToolTerminalError } from "omk-agent-core";
 import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
+import { assertPlanReadOnlyAllowsTool } from "../plan-host-boundary.ts";
 import {
 	EditDiagnosticsRun,
 	ensureEditDiagnosticsSession,
@@ -75,8 +76,9 @@ export function createWriteToolDefinition(
 			{ path, content }: { path: string; content: string },
 			signal?: AbortSignal,
 			_onUpdate?,
-			_ctx?,
+			ctx?,
 		) {
+			assertPlanReadOnlyAllowsTool(ctx?.sessionManager?.getSessionId?.(), { toolName: "write", source: "builtin" });
 			const absolutePath = resolveToCwd(path, cwd);
 			assertWorkspaceWrite(options?.workspaceRoots, "Write", path, absolutePath);
 			if (options?.canWritePath && !options.canWritePath(absolutePath)) {

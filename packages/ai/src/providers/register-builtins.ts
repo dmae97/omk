@@ -1,4 +1,4 @@
-import { clearApiProviders, registerApiProvider } from "../api-registry.ts";
+import { clearApiProviders, registerApiProvider, registerApiProviderIfMissing } from "../api-registry.ts";
 import type { AssistantMessageEvent, Context, Model, SimpleStreamOptions, StreamFunction } from "../types.ts";
 import type { BedrockOptions } from "./amazon-bedrock.ts";
 import type { AnthropicOptions } from "./anthropic.ts";
@@ -276,58 +276,54 @@ export const streamSimpleOpenAIResponses = createLazySimpleStream(loadOpenAIResp
 const streamBedrockLazy = createLazyStream(loadBedrockProviderModule);
 const streamSimpleBedrockLazy = createLazySimpleStream(loadBedrockProviderModule);
 
-export function registerBuiltInApiProviders(): void {
-	registerApiProvider({ api: "devin-agent", stream: streamDevin, streamSimple: streamSimpleDevin });
-	registerApiProvider({ api: "cursor-agent", stream: streamCursor, streamSimple: streamSimpleCursor });
-	registerApiProvider({
-		api: "anthropic-messages",
-		stream: streamAnthropic,
-		streamSimple: streamSimpleAnthropic,
-	});
+export function registerBuiltInApiProviders(register: typeof registerApiProvider = registerApiProvider): void {
+	register({ api: "devin-agent", stream: streamDevin, streamSimple: streamSimpleDevin });
+	register({ api: "cursor-agent", stream: streamCursor, streamSimple: streamSimpleCursor });
+	register({ api: "anthropic-messages", stream: streamAnthropic, streamSimple: streamSimpleAnthropic });
 
-	registerApiProvider({
+	register({
 		api: "openai-completions",
 		stream: streamOpenAICompletions,
 		streamSimple: streamSimpleOpenAICompletions,
 	});
 
-	registerApiProvider({
+	register({
 		api: "mistral-conversations",
 		stream: streamMistral,
 		streamSimple: streamSimpleMistral,
 	});
 
-	registerApiProvider({
+	register({
 		api: "openai-responses",
 		stream: streamOpenAIResponses,
 		streamSimple: streamSimpleOpenAIResponses,
 	});
 
-	registerApiProvider({
+	register({
 		api: "azure-openai-responses",
 		stream: streamAzureOpenAIResponses,
 		streamSimple: streamSimpleAzureOpenAIResponses,
 	});
 
-	registerApiProvider({
+	register({
 		api: "openai-codex-responses",
 		stream: streamOpenAICodexResponses,
 		streamSimple: streamSimpleOpenAICodexResponses,
 	});
 
-	registerApiProvider({
+	register({
 		api: "google-generative-ai",
 		stream: streamGoogle,
 		streamSimple: streamSimpleGoogle,
 	});
 
-	registerApiProvider({
+	register({
 		api: "google-vertex",
 		stream: streamGoogleVertex,
 		streamSimple: streamSimpleGoogleVertex,
 	});
 
-	registerApiProvider({
+	register({
 		api: "bedrock-converse-stream",
 		stream: streamBedrockLazy,
 		streamSimple: streamSimpleBedrockLazy,
@@ -337,6 +333,10 @@ export function registerBuiltInApiProviders(): void {
 export function resetApiProviders(): void {
 	clearApiProviders();
 	registerBuiltInApiProviders();
+}
+
+export function restoreMissingBuiltInApiProviders(): void {
+	registerBuiltInApiProviders(registerApiProviderIfMissing);
 }
 
 registerBuiltInApiProviders();

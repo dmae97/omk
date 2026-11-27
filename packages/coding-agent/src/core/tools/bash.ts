@@ -7,6 +7,7 @@ import { isDefaultOnEnvFlag } from "../env-flag.ts";
 import { isCommandSafetyDisabled } from "../extensions/builtin/command-safety-gate.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { assertLoadoutAccess, type LoadoutAccessGuard } from "../loadout-access-policy.ts";
+import { assertPlanReadOnlyAllowsTool, isPlanReadOnlyActive } from "../plan-host-boundary.ts";
 import {
 	bashBudgetTimeoutMessage,
 	getActiveRemainingBudget,
@@ -147,6 +148,15 @@ export function createBashToolDefinition(
 
 			// Safety floor: re-classify the EFFECTIVE command after commandPrefix/spawnHook.
 			// Skipped entirely in YOLO mode (env contract in isCommandSafetyDisabled).
+			const planSessionId = ctx?.sessionManager?.getSessionId?.();
+			const planReadOnly = isPlanReadOnlyActive(planSessionId);
+			if (planReadOnly) {
+				assertPlanReadOnlyAllowsTool(planSessionId, {
+					toolName: "bash",
+					source: "shell",
+					args: { command: spawnContext.command },
+				});
+			}
 			if (!isCommandSafetyDisabled()) {
 				const effectiveVerdict = classifyShellCommand(spawnContext.command);
 				if (effectiveVerdict.risk === "block") {
@@ -237,6 +247,7 @@ export function createBashToolDefinition(
 						onData: handleData,
 						signal,
 						timeout: effectiveTimeoutSec,
+						readOnly: planReadOnly,
 						env: spawnContext.env,
 					});
 					exitCode = result.exitCode;

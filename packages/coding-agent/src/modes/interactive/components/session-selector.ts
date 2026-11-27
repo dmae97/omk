@@ -17,6 +17,7 @@ import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
 import { SessionSearchController } from "./session-selector-async-search.ts";
 import {
+	formatSelectedSessionPreview,
 	formatSessionCapNotice,
 	formatSessionDate,
 	type SessionListCapInfo,
@@ -413,7 +414,10 @@ class SessionList implements Component, Focusable {
 			const scrollInfo = theme.fg("muted", truncateToWidth(scrollText, width, ""));
 			lines.push(scrollInfo);
 		}
-
+		const highlighted = this.filteredSessions[this.selectedIndex]?.session;
+		if (highlighted) {
+			lines.push(...formatSelectedSessionPreview(highlighted, width, truncateToWidth, (c, s) => theme.fg(c, s)));
+		}
 		return lines;
 	}
 

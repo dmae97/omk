@@ -37,6 +37,7 @@ import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/mod
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
 import { withAllowScriptsHint } from "./core/package-install-args.ts";
 import { captureStartupProjectTrust } from "./core/project-trust-env.ts";
+import { selectCoreRuntimeAtStartup } from "./core/rust-core-runtime-bridge.ts";
 import type { CreateAgentSessionOptions } from "./core/sdk.ts";
 import { getMissingSessionCwdIssue, MissingSessionCwdError } from "./core/session-cwd.ts";
 import { assertValidSessionId, SessionManager } from "./core/session-manager.ts";
@@ -504,6 +505,7 @@ export interface MainOptions {
 export async function main(args: string[], options?: MainOptions) {
 	// Spec 053: read OMK_TRUST_PROJECT once, bind "1" to the startup project, and keep it from child processes.
 	captureStartupProjectTrust(process.cwd());
+	selectCoreRuntimeAtStartup(process.env, { onRollbackWarning: (msg) => console.error(`Warning: ${msg}`) });
 	const initialization = runInitCli(args);
 	if (initialization.handled) {
 		process.exitCode = initialization.exitCode;

@@ -14,9 +14,11 @@ describe("P1-4: compareSameModelHarnesses", () => {
 	it("computes paired pass@1, all-k-success, median tokens per solved task, p95 wall time, and cost deltas", () => {
 		const report = compareSameModelHarnesses({
 			baselineHarness: "competitor-cli",
+			grader: { graderId: "tb-4.0-independent", independent: true },
 			runs: [
 				{
 					harness: "competitor-cli",
+					harnessVersion: "1.0.0",
 					provenance: baseProvenance,
 					trials: [
 						{ taskId: "t1", attempt: 1, passed: true, tokens: 40_000, wallTimeMs: 12_000, costUsd: 0.4 },
@@ -27,6 +29,7 @@ describe("P1-4: compareSameModelHarnesses", () => {
 				},
 				{
 					harness: "omk",
+					harnessVersion: "3.0.0",
 					provenance: baseProvenance,
 					trials: [
 						{ taskId: "t1", attempt: 1, passed: true, tokens: 30_000, wallTimeMs: 10_000, costUsd: 0.3 },
@@ -54,14 +57,17 @@ describe("P1-4: compareSameModelHarnesses", () => {
 			() =>
 				compareSameModelHarnesses({
 					baselineHarness: "competitor-cli",
+					grader: { graderId: "tb-4.0-independent", independent: true },
 					runs: [
 						{
 							harness: "competitor-cli",
+							harnessVersion: "1.0.0",
 							provenance: baseProvenance,
 							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
 						},
 						{
 							harness: "omk",
+							harnessVersion: "3.0.0",
 							provenance: { ...baseProvenance, modelId: "gpt-5.4" },
 							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
 						},
@@ -76,14 +82,17 @@ describe("P1-4: compareSameModelHarnesses", () => {
 			() =>
 				compareSameModelHarnesses({
 					baselineHarness: "competitor-cli",
+					grader: { graderId: "tb-4.0-independent", independent: true },
 					runs: [
 						{
 							harness: "competitor-cli",
+							harnessVersion: "1.0.0",
 							provenance: baseProvenance,
 							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
 						},
 						{
 							harness: "omk",
+							harnessVersion: "3.0.0",
 							provenance: baseProvenance,
 							trials: [{ taskId: "t2", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
 						},
@@ -146,6 +155,105 @@ describe("P1-4: compareSameModelHarnesses", () => {
 						},
 						{
 							harness: "omk",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+					],
+				}),
+			/independent grader/i,
+		);
+	});
+
+	it("P0-5: rejects missing attempt 1 (never counts attempt 2 as pass@1) and rejects missing model, version, or grader metadata", () => {
+		const validGrader = { graderId: "tb-4.0-independent", independent: true };
+		// Missing attempt 1 with attempt 2 passed MUST fail closed (never inflate pass@1)
+		assert.throws(
+			() =>
+				compareSameModelHarnesses({
+					baselineHarness: "claude-code",
+					grader: validGrader,
+					runs: [
+						{
+							harness: "claude-code",
+							harnessVersion: "2.1.0",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 1, passed: false, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+						{
+							harness: "omk",
+							harnessVersion: "3.0.0",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 2, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+					],
+				}),
+			/attempt 1|contiguous/i,
+		);
+
+		// Missing modelId on both runs MUST be rejected (not silently equal undefined === undefined)
+		const noModel = { ...baseProvenance };
+		delete noModel.modelId;
+		assert.throws(
+			() =>
+				compareSameModelHarnesses({
+					baselineHarness: "claude-code",
+					grader: validGrader,
+					runs: [
+						{
+							harness: "claude-code",
+							harnessVersion: "2.1.0",
+							provenance: noModel,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+						{
+							harness: "omk",
+							harnessVersion: "3.0.0",
+							provenance: noModel,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+					],
+				}),
+			/modelId/i,
+		);
+
+		// Missing harnessVersion MUST be rejected
+		assert.throws(
+			() =>
+				compareSameModelHarnesses({
+					baselineHarness: "claude-code",
+					grader: validGrader,
+					runs: [
+						{
+							harness: "claude-code",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+						{
+							harness: "omk",
+							harnessVersion: "3.0.0",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+					],
+				}),
+			/harnessVersion/i,
+		);
+
+		// Missing grader MUST be rejected
+		assert.throws(
+			() =>
+				compareSameModelHarnesses({
+					baselineHarness: "claude-code",
+					runs: [
+						{
+							harness: "claude-code",
+							harnessVersion: "2.1.0",
+							provenance: baseProvenance,
+							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
+						},
+						{
+							harness: "omk",
+							harnessVersion: "3.0.0",
 							provenance: baseProvenance,
 							trials: [{ taskId: "t1", attempt: 1, passed: true, tokens: 1000, wallTimeMs: 100, costUsd: 0.01 }],
 						},

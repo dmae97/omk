@@ -5,7 +5,7 @@
     "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
     "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
     "packages/ai/src/providers/anthropic-compat.ts": "c74ab6455c67d8066c9fe59610cf7343e0dd82c05ea8dfcc682ef08aad23dd00",
-    "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff"
+    "packages/coding-agent/src/core/model-registry.ts": "6d415e392e1dd74ef33e681cbfeaa53709852e2b0fb6e9dbb71f97f08aa658e7"
   },
   "cases": [
     {

@@ -1,5 +1,59 @@
 import { isReadOnlyPlanCommand, isShellToolName, isWriteToolName } from "./pstack-plan-guards.ts";
+import type { SandboxPolicy } from "./sandbox/policy.ts";
 
+const activePlanReadOnlySessions = new Set<string>();
+
+export function setPlanReadOnlyActive(sessionId: string | undefined, active: boolean): void {
+	if (!sessionId) return;
+	if (active) activePlanReadOnlySessions.add(sessionId);
+	else activePlanReadOnlySessions.delete(sessionId);
+}
+
+export function isPlanReadOnlyActive(sessionId: string | undefined): boolean {
+	return sessionId !== undefined && activePlanReadOnlySessions.has(sessionId);
+}
+
+export function toReadOnlySandboxPolicy(policy: SandboxPolicy): SandboxPolicy {
+	const denyWrite = policy.filesystem.denyWrite.includes(policy.filesystem.root)
+		? policy.filesystem.denyWrite
+		: [policy.filesystem.root, ...policy.filesystem.denyWrite];
+	return {
+		...policy,
+		filesystem: {
+			...policy.filesystem,
+			writeAllow: [],
+			tempWrite: [],
+			denyWrite,
+		},
+	};
+}
+
+export function assertPlanReadOnlyAllowsTool(sessionId: string | undefined, call: PlanHostBoundaryCall): void {
+	if (!isPlanReadOnlyActive(sessionId)) return;
+	const verdict = evaluatePlanHostBoundary(call);
+	if (!verdict.allowed) {
+		throw new Error(`[${verdict.boundary}] ${verdict.reason}`);
+	}
+}
+
+export function evaluatePlanToolCallEvent(event: {
+	readonly toolName: string;
+	readonly input?: unknown;
+}): { readonly block: true; readonly reason: string } | undefined {
+	const source = isShellToolName(event.toolName) ? "shell" : event.toolName.includes("__") ? "mcp" : "builtin";
+	const verdict = evaluatePlanHostBoundary({
+		toolName: event.toolName,
+		source,
+		args: (event.input ?? {}) as Readonly<Record<string, unknown>>,
+	});
+	if (!verdict.allowed) {
+		return {
+			block: true,
+			reason: `Pstack /plan mode is read-only ([${verdict.boundary}]): ${verdict.reason}. Use /plan run or /plan off first.`,
+		};
+	}
+	return undefined;
+}
 const READ_ONLY_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
 	"read",
 	"grep",

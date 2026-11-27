@@ -27,7 +27,6 @@ import {
 	getSupportedThinkingLevels,
 	isBuiltinStreamFn,
 	modelsAreEqual,
-	resetApiProviders,
 } from "omk-ai";
 import { APP_NAME, getAgentDir, VERSION } from "../config.ts";
 import type { ReplayLedgerManager } from "../guardrails/evidence-system.ts";
@@ -758,6 +757,7 @@ export class AgentSession {
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this._runBudget = new SessionRunBudget(this.agent, {
+			sessionId: () => config.sessionManager.getSessionId(),
 			prefixCauses: new PrefixBoundaryCauseHolder(),
 			assertIdle: () => {
 				this._promptLifecycle.assertIdle();
@@ -4795,7 +4795,7 @@ export class AgentSession {
 				await emitSessionShutdownEvent(this._extensionRunner, { type: "session_shutdown", reason: "reload" });
 				await this.settingsManager.reload();
 				this._invalidateContextBudgetCache({ type: "settings" });
-				resetApiProviders();
+				this._modelRegistry.releaseOwnedProviders();
 				await this._resourceLoader.reload();
 				this._extensionRunner.invalidate(undefined, this._resourceLoader.getExtensions().runtime);
 				this._buildRuntime({

@@ -124,3 +124,40 @@ export function createSessionMetadataLoaders(
 		),
 	];
 }
+
+function cleanSingleLine(text: string): string {
+	return text
+		.replace(/[\x00-\x1f\x7f]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/** Compact preview lines for the highlighted session so similarly named sessions are immediately distinguishable. */
+export function formatSelectedSessionPreview(
+	session: {
+		readonly firstMessage: string;
+		readonly lastUserMessage?: string;
+		readonly branchCount?: number;
+		readonly parentSessionPath?: string;
+		readonly lastBranchSummary?: string;
+	},
+	width: number,
+	truncate: (s: string, w: number, ellipsis: string) => string,
+	fg: (color: "dim" | "muted" | "accent", s: string) => string,
+): string[] {
+	const lastReq = cleanSingleLine(session.lastUserMessage || session.firstMessage || "(no messages)");
+	const branches = session.branchCount ?? 1;
+	const branchLabel = branches > 1 ? `${branches} branches` : "1 linear branch";
+	const metaParts = [branchLabel];
+	if (session.parentSessionPath) {
+		const parentBase = session.parentSessionPath.split(/[\\/]/).pop() ?? session.parentSessionPath;
+		metaParts.push(`forked from ${parentBase}`);
+	}
+	if (session.lastBranchSummary) {
+		metaParts.push(`branch: ${cleanSingleLine(session.lastBranchSummary)}`);
+	}
+	return [
+		truncate(`${fg("dim", "  Last: ")}${fg("muted", lastReq)}`, width, "…"),
+		truncate(`${fg("dim", "  Tree: ")}${fg("dim", metaParts.join(" · "))}`, width, "…"),
+	];
+}
