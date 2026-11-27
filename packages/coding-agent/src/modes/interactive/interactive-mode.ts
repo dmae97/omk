@@ -205,7 +205,7 @@ import {
 } from "./theme/theme.ts";
 import { checkTmuxKeyboardSetup } from "./tmux-keyboard.ts";
 import type { TmuxStatusRail } from "./tmux-status-rail.ts";
-import { createTuiDiagnostics, createTuiDiagnosticsView, notifyDiagnosticSave } from "./tui-diagnostics.ts";
+import { buildDiagnosticsViewForCommand, createTuiDiagnostics } from "./tui-diagnostics.ts";
 import { captureTuiRuntime, inspectTuiRuntime } from "./tui-runtime-info.ts";
 
 const TUI_RUNTIME = captureTuiRuntime(import.meta.url);
@@ -6346,8 +6346,8 @@ export class InteractiveMode {
 			lastResourceReloadAt: this.lastResourceReloadAt,
 		});
 		this.chatContainer.addChild(new Spacer(1));
-		this.chatContainer.addChild(createTuiDiagnosticsView(report, TUI_RUNTIME));
-		if (args === "save") notifyDiagnosticSave(report, this.showStatus.bind(this), this.showError.bind(this));
+		const io = { status: (m: string) => this.showStatus(m), error: (e: string) => this.showError(e) };
+		this.chatContainer.addChild(buildDiagnosticsViewForCommand(report, TUI_RUNTIME, args === "save", io));
 		this.ui.requestRender();
 	}
 

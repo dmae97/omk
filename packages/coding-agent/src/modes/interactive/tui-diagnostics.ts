@@ -11,7 +11,16 @@ import type { TuiRuntimeCapture, TuiRuntimeInfo } from "./tui-runtime-info.ts";
 type DiagnosticTermination = Pick<
 	SessionTermination,
 	"kind" | "phase" | "causeCode" | "source" | "sideEffects" | "retryable" | "safeToAutoRetry"
->;
+> & {
+	readonly failedAt: string;
+};
+
+export interface SavedDiagnosticRecord {
+	readonly filePath: string;
+	readonly generatedAt: string;
+	readonly failedAt: string | null;
+	readonly failureSummary: string | null;
+}
 export interface TuiDiagnostics {
 	readonly schemaVersion: 1;
 	readonly privacy: "metadata-only";
@@ -110,6 +119,7 @@ export function createTuiDiagnostics(
 					sideEffects: t.sideEffects,
 					retryable: t.retryable,
 					safeToAutoRetry: t.safeToAutoRetry,
+					failedAt: t.timestamp,
 				}
 			: null,
 	};
@@ -135,14 +145,27 @@ export function notifyDiagnosticSave(
 	report: TuiDiagnostics,
 	status: (message: string) => void,
 	error: (message: string) => void,
-): void {
+	directory = tmpdir(),
+): SavedDiagnosticRecord | undefined {
 	try {
-		status(`Metadata-only diagnostics saved locally: ${saveTuiDiagnostics(report)}`);
+		const filePath = saveTuiDiagnostics(report, directory);
+		const t = report.termination;
+		const failureSummary = t ? `${t.kind} (${t.causeCode} · ${t.source})` : null;
+		const message = t
+			? `Metadata-only diagnostics saved for ${failureSummary}, failed ${t.failedAt} · report generated ${report.generatedAt} · file: ${filePath}`
+			: `Metadata-only diagnostics saved (no failure recorded) · report generated ${report.generatedAt} · file: ${filePath}`;
+		status(message);
+		return { filePath, generatedAt: report.generatedAt, failedAt: t?.failedAt ?? null, failureSummary };
 	} catch {
 		error("Could not save diagnostics. Check temporary-directory permissions; no transcript was exported.");
+		return undefined;
 	}
 }
-export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiRuntimeCapture): Component {
+export function createTuiDiagnosticsView(
+	report: TuiDiagnostics,
+	locations: TuiRuntimeCapture,
+	savedFilePath?: string,
+): Component {
 	return {
 		render(width: number): string[] {
 			const view = new Container();
@@ -172,7 +195,10 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 						]
 					: []),
 				`Streaming: ${report.session.streaming ? "yes" : "no"} · Compacting: ${report.session.compacting ? "yes" : "no"}`,
-				t ? `Latest outcome: ${t.kind} · ${t.causeCode} · ${t.source}` : "Latest outcome: none recorded",
+				`Report generated: ${report.generatedAt}`,
+				t
+					? `Latest outcome: ${t.kind} · ${t.causeCode} · ${t.source} · failed at ${t.failedAt}`
+					: "Latest outcome: none recorded",
 				...(t
 					? [
 							`Effects: ${t.sideEffects} · Retryable: ${t.retryable ? "yes" : "no"} · Automatic retry: ${t.safeToAutoRetry ? "yes" : "no"}`,
@@ -184,6 +210,7 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 							`Output queue: ${output.writableLength} bytes, peak ${output.peakWritableLength}; errors ${output.errorCount}`,
 						]
 					: []),
+				...(savedFilePath ? [`Saved diagnostic file (local only): ${savedFilePath}`] : []),
 				`Launch path (local only): ${locations.entryPath ?? "unavailable"}`,
 				`UI module (local only): ${locations.modulePath ?? "unavailable"}`,
 			];
@@ -203,4 +230,14 @@ export function createTuiDiagnosticsView(report: TuiDiagnostics, locations: TuiR
 		},
 		invalidate(): void {},
 	};
+}
+
+export function buildDiagnosticsViewForCommand(
+	report: TuiDiagnostics,
+	locations: TuiRuntimeCapture,
+	save: boolean,
+	notify: { status(message: string): void; error(message: string): void },
+): Component {
+	const saved = save ? notifyDiagnosticSave(report, notify.status, notify.error) : undefined;
+	return createTuiDiagnosticsView(report, locations, saved?.filePath);
 }
