@@ -252,11 +252,13 @@ export class GoalAcceptance {
 		return this.complete(store, goal, cwd);
 	}
 
-	/** An approved check, prior trusted receipt, or persisted receipt on disk gates completion across restarts. */
+	/** An approved check, prior trusted receipt, persisted receipt, or journal evidence gates completion across restarts. */
 	private gated(goal: DurableGoalSnapshot, cwd: string): boolean {
 		const key = goalKeyOf(goal);
 		const contract = this.contracts.get(key);
-		if (contract === undefined) return hasPersistedVerificationReceipts(cwd, key);
+		if (contract === undefined) {
+			return (goal.evidence?.length ?? 0) > 0 || hasPersistedVerificationReceipts(cwd, key);
+		}
 		if (contract.command !== undefined) return true;
 		for (const receipt of this.trusted.values()) if (receipt.goalKey === key) return true;
 		return false;

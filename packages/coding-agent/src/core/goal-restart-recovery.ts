@@ -207,7 +207,8 @@ export function computeAcceptanceGap(params: {
 	readonly currentWorkspace: GoalWorkspaceState;
 	readonly receiptMatches: (receiptId: string, digest: string) => boolean;
 }): string | undefined {
-	if (params.contract?.command === undefined) return "the approved acceptance check was withdrawn";
+	if (params.contract === undefined) return "verification approval expired on restart; re-approve and reverify";
+	if (params.contract.command === undefined) return "the approved acceptance check was withdrawn";
 	if (params.contract.latestPassed === false) return "the latest acceptance check failed";
 	const candidates = freshDurableGoalEvidence(params.goal)
 		.flatMap((evidence) => {
