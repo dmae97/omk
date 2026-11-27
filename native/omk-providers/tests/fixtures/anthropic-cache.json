@@ -9,7 +9,7 @@
     "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
     "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
     "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
-    "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff",
+    "packages/coding-agent/src/core/model-registry.ts": "6d415e392e1dd74ef33e681cbfeaa53709852e2b0fb6e9dbb71f97f08aa658e7",
     "node_modules/@anthropic-ai/sdk/package.json": "fcfaedec125d8cdfa6174f2ffae129f0ad34c681cad90a2a9dc9118cd9caecfa"
   },
   "cases": [

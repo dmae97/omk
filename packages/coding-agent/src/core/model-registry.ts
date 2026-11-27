@@ -15,11 +15,8 @@ import {
 	type OAuthProviderInterface,
 	type OpenAICompletionsCompat,
 	type OpenAIResponsesCompat,
-	registerApiProvider,
-	resetApiProviders,
 	type SimpleStreamOptions,
 } from "omk-ai";
-import { registerOAuthProvider, resetOAuthProviders } from "omk-ai/oauth";
 import { join } from "path";
 import { getAgentDir } from "../config.ts";
 import { warnDeprecation } from "../utils/deprecation.ts";
@@ -27,6 +24,7 @@ import { stripJsonComments } from "../utils/json.ts";
 import { normalizePath } from "../utils/paths.ts";
 import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
 import { GROK_OAUTH_PROVIDER } from "./grok-playbook.ts";
+import { ModelRegistryProviderOwnership } from "./model-registry-provider-ownership.ts";
 import { ModelRegistryRefreshInputs } from "./model-registry-refresh-inputs.ts";
 import {
 	formatValidationPath,
@@ -288,7 +286,7 @@ export class ModelRegistry {
 	private modelsJsonPath: string | undefined;
 	private readonly snapshotOnLoad: boolean;
 	private readonly refreshInputs = new ModelRegistryRefreshInputs();
-
+	private readonly ownedProviders = new ModelRegistryProviderOwnership();
 	private constructor(authStorage: AuthStorage, modelsJsonPath: string | undefined, snapshotOnLoad = true) {
 		this.authStorage = authStorage;
 		this.modelsJsonPath = modelsJsonPath ? normalizePath(modelsJsonPath) : undefined;
@@ -317,15 +315,17 @@ export class ModelRegistry {
 		this.modelRequestHeaders.clear();
 		this.loadError = undefined;
 
-		// Ensure dynamic API/OAuth registrations are rebuilt from current provider state.
-		resetApiProviders();
-		resetOAuthProviders();
-
+		// Release only this session/registry's owned dynamic API/OAuth providers so sibling sessions stay intact.
+		this.releaseOwnedProviders();
 		this.loadModels();
 
 		for (const [providerName, config] of this.registeredProviders.entries()) {
 			this.applyProviderConfig(providerName, config);
 		}
+	}
+	/** Release only the dynamic API and OAuth providers registered by this ModelRegistry instance. */
+	releaseOwnedProviders(): void {
+		this.ownedProviders.releaseAll();
 	}
 
 	/**
@@ -914,19 +914,10 @@ export class ModelRegistry {
 				...config.oauth,
 				id: providerName,
 			};
-			registerOAuthProvider(oauthProvider);
+			this.ownedProviders.registerOAuth(providerName, oauthProvider);
 		}
-
 		if (config.streamSimple) {
-			const streamSimple = config.streamSimple;
-			registerApiProvider(
-				{
-					api: config.api!,
-					stream: (model, context, options) => streamSimple(model, context, options as SimpleStreamOptions),
-					streamSimple,
-				},
-				`provider:${providerName}`,
-			);
+			this.ownedProviders.registerStreamSimple(providerName, config.api!, config.streamSimple);
 		}
 
 		this.storeProviderRequestConfig(providerName, config);

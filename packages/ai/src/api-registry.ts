@@ -94,6 +94,15 @@ export function registerApiProvider<TApi extends Api, TOptions extends StreamOpt
 	});
 }
 
+export function registerApiProviderIfMissing<TApi extends Api, TOptions extends StreamOptions>(
+	provider: ApiProvider<TApi, TOptions>,
+	sourceId?: string,
+): void {
+	if (!apiProviderRegistry.has(provider.api)) {
+		registerApiProvider(provider, sourceId);
+	}
+}
+
 export function getApiProvider(api: Api): ApiProviderInternal | undefined {
 	return apiProviderRegistry.get(api)?.provider;
 }
