@@ -23,6 +23,7 @@ export { ExtensionRunner } from "./runner.ts";
 export type {
 	AfterProviderResponseEvent,
 	AgentEndEvent,
+	AgentSettledEvent,
 	AgentStartEvent,
 	// Re-exports
 	AgentToolResult,
@@ -96,6 +97,7 @@ export type {
 	LsToolResultEvent,
 	// Events - Message
 	MessageEndEvent,
+	MessageEndEventResult,
 	// Message Rendering
 	MessageRenderer,
 	MessageRenderOptions,
@@ -138,6 +140,7 @@ export type {
 	SetModelHandler,
 	SetThinkingLevelHandler,
 	TerminalInputHandler,
+	ThinkingLevelSelectEvent,
 	// Events - Tool
 	ToolCallEvent,
 	ToolCallEventResult,
@@ -150,6 +153,7 @@ export type {
 	ToolExecutionStartEvent,
 	ToolExecutionUpdateEvent,
 	ToolInfo,
+	ToolRenderContext,
 	ToolRenderResultOptions,
 	ToolResultEvent,
 	ToolResultEventResult,
