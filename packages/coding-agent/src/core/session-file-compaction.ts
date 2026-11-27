@@ -58,14 +58,15 @@ function sameOrderedIds(left: readonly string[], right: readonly SessionEntry[])
 	return left.length === right.length && left.every((id, index) => id === right[index]?.id);
 }
 
-function assertSourceMatches(
+function resolveMatchedCompactionSourceScope(
 	entry: CompactionEntry,
 	envelope: CompactionEnvelope,
-	source: readonly SessionEntry[],
-): void {
-	if (!matchesSource(entry, envelope, source)) {
-		throw new Error(`Invalid compaction envelope source in entry ${entry.id}. Run the session doctor.`);
-	}
+	prefix: readonly FileEntry[],
+	leafId: string,
+): "full" | "windowed" {
+	if (matchesSource(entry, envelope, branchFromPrefix(prefix, leafId))) return "full";
+	if (matchesSource(entry, envelope, windowedSourceFromPrefix(prefix, leafId))) return "windowed";
+	throw new Error(`Invalid compaction envelope source in entry ${entry.id}. Run the session doctor.`);
 }
 
 function matchesSource(entry: CompactionEntry, envelope: CompactionEnvelope, source: readonly SessionEntry[]): boolean {
@@ -126,7 +127,7 @@ export function validatePersistedCompactionEnvelopes(
 		if (!envelope) continue;
 		if (entry.parentId === null) throw new Error(`Compaction entry ${entry.id} has no source leaf`);
 		const prefix = entries.slice(0, index);
-		const source = branchFromPrefix(prefix, entry.parentId);
+		branchFromPrefix(prefix, entry.parentId);
 		const start = starts[index];
 		if (start === undefined) throw new Error(`Compaction entry ${entry.id} has no persisted prefix`);
 		const last = prefix.at(-1);
@@ -156,12 +157,7 @@ export function validatePersistedCompactionEnvelopes(
 		// The writer attests either the full parent branch or its kept-window
 		// slice since the previous compaction (both are exact matches, so
 		// tamper-evidence is preserved; see windowedSourceFromPrefix).
-		if (
-			!matchesSource(entry, envelope, source) &&
-			!matchesSource(entry, envelope, windowedSourceFromPrefix(prefix, entry.parentId))
-		) {
-			throw new Error(`Invalid compaction envelope source in entry ${entry.id}. Run the session doctor.`);
-		}
+		resolveMatchedCompactionSourceScope(entry, envelope, prefix, entry.parentId);
 	}
 }
 
@@ -187,8 +183,11 @@ export function rebindBranchedCompactionEnvelopes(
 				if (typeof details !== "object" || details === null || Array.isArray(details))
 					throw new Error(`Compaction entry ${entry.id} has invalid details`);
 				if (entry.parentId === null) throw new Error(`Compaction entry ${entry.id} has no source leaf`);
-				assertSourceMatches(entry, envelope, branchFromPrefix(originalPrefix, entry.parentId));
-				const source = branchFromPrefix(copiedPrefix, entry.parentId);
+				const scope = resolveMatchedCompactionSourceScope(entry, envelope, originalPrefix, entry.parentId);
+				const source =
+					scope === "windowed"
+						? windowedSourceFromPrefix(copiedPrefix, entry.parentId)
+						: branchFromPrefix(copiedPrefix, entry.parentId);
 				const first = source[0];
 				const last = source.at(-1);
 				if (!first || !last) throw new Error(`Compaction entry ${entry.id} has no source entries`);
