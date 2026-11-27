@@ -529,6 +529,17 @@ describe("Context overflow error handling", () => {
 		}, 120000);
 	});
 
+	describe.skipIf(!process.env.LLMTR_API_KEY)("LLMTR", () => {
+		it("llmtr/qwen3-8-27b - should detect overflow via isContextOverflow", async () => {
+			const model = getModel("llmtr", "llmtr/qwen3-8-27b");
+			const result = await testContextOverflow(model, process.env.LLMTR_API_KEY!);
+			logResult(result);
+
+			expect(result.stopReason).toBe("error");
+			expect(isContextOverflow(result.response, model.contextWindow)).toBe(true);
+		}, 120000);
+	});
+
 	// =============================================================================
 	// OpenRouter - Multiple backend providers
 	// Expected pattern: "maximum context length is X tokens"

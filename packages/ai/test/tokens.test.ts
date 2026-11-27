@@ -222,6 +222,14 @@ describe("Token Statistics on Abort", () => {
 		});
 	});
 
+	describe.skipIf(!process.env.LLMTR_API_KEY)("LLMTR Provider", () => {
+		const llm = getModel("llmtr", "llmtr/qwen3-8-27b");
+
+		it("should include token stats when aborted mid-stream", { retry: 3, timeout: 30000 }, async () => {
+			await testTokensOnAbort(llm);
+		});
+	});
+
 	describe.skipIf(!process.env.MISTRAL_API_KEY)("Mistral Provider", () => {
 		const llm = getModel("mistral", "devstral-medium-latest");
 

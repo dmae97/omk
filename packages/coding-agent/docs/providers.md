@@ -304,6 +304,7 @@ omk
 | Xiaomi MiMo Token Plan (Amsterdam) | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` | `xiaomi-token-plan-ams` |
 | Xiaomi MiMo Token Plan (Singapore) | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` | `xiaomi-token-plan-sgp` |
 | Zyloo | `ZYLOO_API_KEY` | `zyloo` |
+| LLMTR | `LLMTR_API_KEY` | `llmtr` |
 
 Reference for environment variables and `auth.json` keys: [`const envMap`](https://github.com/dmae97/omk/blob/main/packages/ai/src/env-api-keys.ts) in [`packages/ai/src/env-api-keys.ts`](https://github.com/dmae97/omk/blob/main/packages/ai/src/env-api-keys.ts).
 
@@ -404,6 +405,17 @@ omk --provider zyloo --model claude-opus-4-7
 ```
 
 Model IDs in omk omit the `zyloo/` namespace that the upstream API requires; omk adds it automatically. Models include Claude Opus 4.7, GPT-5.5, Gemini 3.5 Flash, DeepSeek V4 Pro, and Grok 4.3. Run `--list-models` to see the full catalog.
+
+#### LLMTR
+
+LLMTR is a prepaid OpenAI-compatible gateway at `https://llmtr.com/v1`. Create a key at https://llmtr.com/dashboard/keys, set `LLMTR_API_KEY`, and use a `vendor/model` ID:
+
+```bash
+export LLMTR_API_KEY=...
+omk --provider llmtr --model llmtr/qwen3-8-27b
+```
+
+The built-in catalog ships a small starter set, including `llmtr/qwen3-8-27b`, `qwen/qwen3.8-flash`, and `qwen/qwen3.8-max`. Run `--list-models` to see the committed entries. Refreshing the model catalog can pull the rest of the public `GET /v1/models` listing.
 
 #### Auth File
 

@@ -41,6 +41,7 @@ const PROVIDER_TAB_ORDER = [
 	"deepseek",
 	"kimi",
 	"openrouter",
+	"llmtr",
 	"mistral",
 	"xai",
 	"groq",

@@ -77,7 +77,8 @@ export type KnownProvider =
 	| "xiaomi-token-plan-cn"
 	| "xiaomi-token-plan-ams"
 	| "xiaomi-token-plan-sgp"
-	| "zyloo";
+	| "zyloo"
+	| "llmtr";
 export type Provider = KnownProvider | string;
 
 export type KnownImagesProvider = "openrouter";

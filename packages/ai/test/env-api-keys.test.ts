@@ -6,6 +6,7 @@ const originalGhToken = process.env.GH_TOKEN;
 const originalGitHubToken = process.env.GITHUB_TOKEN;
 const originalZaiCodingCnApiKey = process.env.ZAI_CODING_CN_API_KEY;
 const originalZylooApiKey = process.env.ZYLOO_API_KEY;
+const originalLlmtrApiKey = process.env.LLMTR_API_KEY;
 const originalExplabsApiKey = process.env.EXPLABS_API_KEY;
 const originalExperientialApiKey = process.env.EXPERIENTIAL_API_KEY;
 const originalMetaApiKey = process.env.META_API_KEY;
@@ -41,6 +42,12 @@ afterEach(() => {
 		delete process.env.ZYLOO_API_KEY;
 	} else {
 		process.env.ZYLOO_API_KEY = originalZylooApiKey;
+	}
+
+	if (originalLlmtrApiKey === undefined) {
+		delete process.env.LLMTR_API_KEY;
+	} else {
+		process.env.LLMTR_API_KEY = originalLlmtrApiKey;
 	}
 
 	if (originalExplabsApiKey === undefined) {
@@ -105,6 +112,13 @@ describe("environment API keys", () => {
 
 		expect(findEnvKeys("zyloo")).toEqual(["ZYLOO_API_KEY"]);
 		expect(getEnvApiKey("zyloo")).toBe("zyloo-token");
+	});
+
+	it("resolves LLMTR credentials from LLMTR_API_KEY", () => {
+		process.env.LLMTR_API_KEY = "llmtr-token";
+
+		expect(findEnvKeys("llmtr")).toEqual(["LLMTR_API_KEY"]);
+		expect(getEnvApiKey("llmtr")).toBe("llmtr-token");
 	});
 
 	it("resolves Experiential Labs credentials from EXPLABS_API_KEY, then EXPERIENTIAL_API_KEY", () => {

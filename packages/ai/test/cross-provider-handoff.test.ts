@@ -84,6 +84,7 @@ const PROVIDER_MODEL_PAIRS: ProviderModelPair[] = [
 	{ provider: "xai", model: "grok-code-fast-1", label: "xai-grok-code-fast-1" },
 	// Zyloo
 	{ provider: "zyloo", model: "claude-opus-4-7", label: "zyloo-claude-opus-4-7" },
+	{ provider: "llmtr", model: "llmtr/qwen3-8-27b", label: "llmtr-qwen3-8-27b" },
 	// Cerebras
 	{ provider: "cerebras", model: "zai-glm-4.7", label: "cerebras-zai-glm-4.7" },
 	// Cloudflare Workers AI
