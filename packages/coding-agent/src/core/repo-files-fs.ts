@@ -1,4 +1,4 @@
-import { closeSync, type Dirent, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
+import { closeSync, openSync, readdirSync, readSync, realpathSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const ALWAYS_SKIP_DIRS = new Set([".git"]);
@@ -17,21 +17,22 @@ const DEFAULT_IGNORE_NAMES = new Set([
 const SECRET_FILE_RE =
 	/^(?:\.env(?:\..+)?|\.npmrc|\.netrc|\.pypirc|credentials\.json|auth\.json|secrets\.(?:json|ya?ml|toml)|id_rsa(?:\.pub)?|id_ed25519(?:\.pub)?|id_ecdsa(?:\.pub)?|id_dsa(?:\.pub)?|.*\.pem|.*\.key|.*\.p12|.*\.pfx|.*\.jks|.*\.keystore|.*\.kdbx|key4\.db|logins\.json|cookies\.sqlite)$/i;
 
-export type RepoFileKind = "dir" | "file";
-
-export interface RepoFileEntry {
-	readonly name: string;
-	readonly path: string;
-	readonly kind: RepoFileKind;
-	readonly size: number;
-}
+import type { RepoFileEntry, RepoFileKind, SearchRepoFilesOptions } from "./repo-files-search.ts";
+export type { RepoFileEntry, RepoFileKind, SearchRepoFilesOptions };
 
 export interface RepoDirectoryListing {
 	readonly rootName: string;
 	readonly path: string;
 	readonly truncated: boolean;
+	readonly totalEntries: number;
 	readonly entries: readonly RepoFileEntry[];
 }
+export {
+	type RepoFileSearchResult,
+	type RepoFileSearchTruncationReason,
+	searchRepoFiles,
+	searchRepoFilesWithMeta,
+} from "./repo-files-search.ts";
 
 export interface RepoFilePreview {
 	readonly path: string;
@@ -45,13 +46,6 @@ export interface RepoFilePreview {
 export interface ListRepoDirectoryOptions {
 	readonly includeHidden?: boolean;
 	readonly maxEntries?: number;
-}
-
-export interface SearchRepoFilesOptions {
-	readonly includeHidden?: boolean;
-	readonly maxResults?: number;
-	readonly maxDepth?: number;
-	readonly maxScanned?: number;
 }
 
 export function formatCompactSize(bytes: number): string {
@@ -89,7 +83,7 @@ export function listRepoDirectory(
 	options: ListRepoDirectoryOptions = {},
 ): RepoDirectoryListing {
 	const includeHidden = Boolean(options.includeHidden);
-	const maxEntries = Math.min(500, Math.max(20, Number(options.maxEntries) || 300));
+	const maxEntries = Math.min(2000, Math.max(20, Number(options.maxEntries) || 300));
 	const rootReal = realpathSync(resolve(rootDir));
 	const targetDir = resolveSafeRepoPath(rootReal, relPath);
 	const dirents = readdirSync(targetDir, { withFileTypes: true });
@@ -126,68 +120,9 @@ export function listRepoDirectory(
 		rootName: basename(rootReal) || rootReal,
 		path: relative(rootReal, targetDir).split(sep).join("/"),
 		truncated: entries.length > maxEntries,
+		totalEntries: entries.length,
 		entries: entries.slice(0, maxEntries),
 	};
-}
-
-export function searchRepoFiles(
-	rootDir: string,
-	query: string,
-	options: SearchRepoFilesOptions = {},
-): readonly RepoFileEntry[] {
-	const term = query.trim().toLowerCase();
-	if (!term) return [];
-	const includeHidden = Boolean(options.includeHidden);
-	const maxResults = Math.min(200, Math.max(10, Number(options.maxResults) || 80));
-	const maxDepth = Math.min(8, Math.max(1, Number(options.maxDepth) || 6));
-	const maxScanned = Math.min(5000, Math.max(100, Number(options.maxScanned) || 1500));
-	const rootReal = realpathSync(resolve(rootDir));
-	const matches: { entry: RepoFileEntry; score: number }[] = [];
-	let scanned = 0;
-
-	const walk = (dir: string, depth: number): void => {
-		if (depth > maxDepth || scanned >= maxScanned) return;
-		let dirents: Dirent[];
-		try {
-			dirents = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const dirent of dirents) {
-			if (scanned >= maxScanned) return;
-			const name = dirent.name;
-			if (ALWAYS_SKIP_DIRS.has(name)) continue;
-			if (!includeHidden && (name.startsWith(".") || DEFAULT_IGNORE_NAMES.has(name))) continue;
-			if (dirent.isSymbolicLink()) continue;
-			scanned += 1;
-			const full = join(dir, name);
-			const isDir = dirent.isDirectory();
-			const rel = relative(rootReal, full).split(sep).join("/");
-			const lowerName = name.toLowerCase();
-			const lowerRel = rel.toLowerCase();
-			if (lowerRel.includes(term)) {
-				let size = 0;
-				if (!isDir) {
-					try {
-						size = statSync(full).size;
-					} catch {
-						continue;
-					}
-				}
-				const score = lowerName === term ? 0 : lowerName.startsWith(term) ? 1 : lowerName.includes(term) ? 2 : 3;
-				matches.push({ entry: { name, path: rel, kind: isDir ? "dir" : "file", size }, score });
-			}
-			if (isDir) walk(full, depth + 1);
-		}
-	};
-
-	walk(rootReal, 0);
-	matches.sort((a, b) => {
-		if (a.score !== b.score) return a.score - b.score;
-		if (a.entry.kind !== b.entry.kind) return a.entry.kind === "file" ? -1 : 1;
-		return a.entry.path.localeCompare(b.entry.path, undefined, { sensitivity: "base" });
-	});
-	return matches.slice(0, maxResults).map((m) => m.entry);
 }
 
 export function readSafeRepoFile(rootDir: string, relPath: string, maxBytes = 65_536): RepoFilePreview {

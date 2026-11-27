@@ -204,6 +204,7 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 					toggle: () => this.toggle(),
 					focus: () => this.focus(),
 					startSearch: (q) => model.startSearch(q),
+					expandMore: () => model.expandExplorationLimit(),
 					setMouseMode,
 					isMouseEnabled: () => mouseEnabled,
 					getSavedShowFilesSidebar: () => settingsManager.getGlobalSettings().showFilesSidebar,

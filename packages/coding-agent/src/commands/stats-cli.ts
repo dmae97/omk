@@ -8,6 +8,7 @@
 
 import { basename, join, resolve } from "node:path";
 import type { TurnMetricsSummary } from "../core/turn-metrics.ts";
+import { formatMeasuredMetricCount } from "../core/turn-metrics-reliability.ts";
 import { summarizeTurnMetricsDirectory, type TurnMetricsScope } from "../core/turn-metrics-scope.ts";
 
 const USAGE = "Usage: omk stats [--dir <path>] [--json]";
@@ -104,7 +105,7 @@ export function renderStatsReport(summary: TurnMetricsSummary, filePath: string,
 			`  cache read share ${formatPercent(summary.cacheReadShare)} of prompt-side usage (input + cacheRead + cacheWrite) · coverage ${formatCount(summary.cacheReadShareCoverage.turnsUsed)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} turns (${formatCount(summary.cacheReadShareCoverage.turnsMissingCacheWrite)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} missing cacheWrite)`,
 			`  cost          estimated ${summary.costIsLowerBound ? "≥ " : ""}$${summary.totalCostUsd.toFixed(4)} (price table${summary.costIsLowerBound ? "; 하한/lower bound: includes turns with unknown cacheWrite" : ""}) · billed ${summary.billedTurns > 0 ? `$${summary.billedCostUsd.toFixed(4)} (provider-reported, ${formatCount(summary.billedTurns)} turn(s))` : "n/a"}`,
 			`  usage coverage ${formatCount(summary.usageCoverage.turnsWithUsage)}/${formatCount(summary.turns)} turns${summary.usageCoverage.turnsMissingUsage > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingUsage)} missing usage` : ""}${summary.usageCoverage.turnsMissingCacheWrite > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingCacheWrite)} missing cacheWrite` : ""}${summary.usageCoverage.unverifiedProviders.length > 0 ? ` · 미검증 (unverified input semantics): ${summary.usageCoverage.unverifiedProviders.join(", ")}` : ""}`,
-			`  compactions ${formatCount(summary.compactions)} · failovers ${formatCount(summary.failovers)} · ctx plan hit ${formatPercent(summary.contextCachePlanHitRate)}`,
+			`  compactions ${formatMeasuredMetricCount(summary.compactions, summary.compactionCoverage)} · failovers ${formatMeasuredMetricCount(summary.failovers, summary.failoverCoverage)} · ctx plan hit ${formatPercent(summary.contextCachePlanHitRate)}`,
 		);
 	}
 

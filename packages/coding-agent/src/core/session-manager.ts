@@ -25,6 +25,9 @@ import {
 	createCustomMessage,
 } from "./messages.ts";
 import { rebindBranchedCompactionEnvelopes, validatePersistedCompactionEnvelopes } from "./session-file-compaction.ts";
+import { SessionTreeIntegrityError, validateSessionParentTree, walkParentBranchSafely } from "./session-tree-guard.ts";
+export { SessionTreeIntegrityError, validateSessionParentTree };
+
 import {
 	quarantineSessionTrailingFragment,
 	type SessionDurableHead,
@@ -338,13 +341,8 @@ export function buildSessionContext(
 		return { messages: [], thinkingLevel: "off", model: null };
 	}
 
-	// Walk from leaf to root, collecting path
-	const path: SessionEntry[] = [];
-	let current: SessionEntry | undefined = leaf;
-	while (current) {
-		path.unshift(current);
-		current = current.parentId ? byId.get(current.parentId) : undefined;
-	}
+	validateSessionParentTree(entries, byId);
+	const path = walkParentBranchSafely(leaf, byId, Math.max(1, entries.length, byId.size));
 
 	// Extract settings and find compaction
 	let thinkingLevel = "off";
@@ -1176,14 +1174,9 @@ export class SessionManager {
 	 * Use buildSessionContext() to get the resolved messages for the LLM.
 	 */
 	getBranch(fromId?: string): SessionEntry[] {
-		const path: SessionEntry[] = [];
 		const startId = fromId ?? this.leafId;
-		let current = startId ? this.byId.get(startId) : undefined;
-		while (current) {
-			path.push(current);
-			current = current.parentId ? this.byId.get(current.parentId) : undefined;
-		}
-		return path.reverse();
+		const leaf = startId ? this.byId.get(startId) : undefined;
+		return leaf ? walkParentBranchSafely(leaf, this.byId) : [];
 	}
 
 	/**
@@ -1250,9 +1243,11 @@ export class SessionManager {
 		// Sort children by timestamp (oldest first, newest at bottom)
 		// Use iterative approach to avoid stack overflow on deep trees
 		const stack: SessionTreeNode[] = [...roots];
+		const visited = new Set<SessionTreeNode>();
 		while (stack.length > 0) {
 			const node = stack.pop();
-			if (!node) continue;
+			if (!node || visited.has(node)) continue;
+			visited.add(node);
 			node.children.sort((a, b) => new Date(a.entry.timestamp).getTime() - new Date(b.entry.timestamp).getTime());
 			stack.push(...node.children);
 		}

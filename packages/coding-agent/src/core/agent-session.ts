@@ -146,7 +146,13 @@ import { normalizeToolNames, toolNameSetsEqual } from "./session-tool-selection.
 import { createSubagentLaneAuthority, type SubagentLaneAuthority } from "./subagent-lane-authority.ts";
 import { SubagentRoutingReceipt } from "./subagent-routing-receipt.ts";
 import { resolveWorkspaceWriteRoots } from "./tools/workspace-write-guard.ts";
-import { type ToolCallMetric, TurnMetricsSink, turnUsageMetricFromUsage } from "./turn-metrics.ts";
+import {
+	recordSessionTurnMetrics,
+	type ToolCallMetric,
+	TurnMetricsSink,
+	TurnReliabilityCollector,
+	turnUsageMetricFromUsage,
+} from "./turn-metrics.ts";
 
 /** Values that disable a session-level feature through its environment variable. */
 const DISABLED_ENV_VALUES = new Set(["0", "false", "off", "disable", "disabled"]);
@@ -682,6 +688,7 @@ export class AgentSession {
 	private _mcpToolNames: Set<string> = new Set();
 	private _turnMetricsSink: TurnMetricsSink | undefined;
 	private _turnMetricsState: TurnMetricsState | undefined;
+	private readonly _turnReliability = new TurnReliabilityCollector();
 	private _cwd: string;
 	private _repositoryRouterLearningPaths: RepositoryRouterLearningPaths | undefined;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
@@ -1573,33 +1580,23 @@ export class AgentSession {
 		if (!state) return;
 		const sink = this._metricsSink();
 		if (!sink) return;
-		const assistant = message.role === "assistant" ? message : undefined;
-		const usage = assistant?.usage;
-		const selectedModel = this.model ? `${this.model.provider}/${this.model.id}` : null;
-		const runtimeProvenance = buildRuntimeProvenance({
+		recordSessionTurnMetrics({
+			sink,
+			sessionId: this.sessionId,
+			turnIndex: this._turnIndex,
+			provider: this.model?.provider,
+			modelId: this.model?.id,
+			startedAtEpochMs: state.startedAtEpochMs,
+			endedAtEpochMs: Date.now(),
 			requestedModel: state.requestedModel,
-			selectedModel,
-			responseModel: assistant?.responseModel ?? (assistant ? `${assistant.provider}/${assistant.model}` : null),
 			requestedThinking: state.requestedThinking,
 			effectiveThinking: this.thinkingLevel,
-			source: "session",
+			assistant: message.role === "assistant" ? message : undefined,
+			toolCalls: state.toolCalls,
+			reliability: this._turnReliability,
+			buildProvenance: buildRuntimeProvenance,
+			toUsageMetric: turnUsageMetricFromUsage,
 		});
-		try {
-			sink.record({
-				sessionId: this.sessionId,
-				turnIndex: this._turnIndex,
-				provider: this.model?.provider,
-				model: this.model?.id,
-				startedAtEpochMs: state.startedAtEpochMs,
-				endedAtEpochMs: Date.now(),
-				stopReason: assistant?.stopReason,
-				runtimeProvenance,
-				usage: usage ? turnUsageMetricFromUsage(usage) : undefined,
-				toolCalls: state.toolCalls,
-			});
-		} catch {
-			// Never let observability break a turn.
-		}
 	}
 
 	/**
@@ -1711,6 +1708,7 @@ export class AgentSession {
 				this.abortCompaction();
 				this.abortBranchSummary();
 				this.abortBash();
+				this._bashService.flushPendingForShutdown();
 				this.agent.abort();
 			} catch {
 				// Dispose must succeed even if an abort hook throws.
@@ -2141,7 +2139,7 @@ export class AgentSession {
 				this._publishRuntimeFailure(this._runBudget.failure);
 			outcome = promptSettlement.resolvePromptSettlementOutcome(outcome, this._lastTermination?.kind);
 			this._extensionSettlement.finish();
-			this._flushPendingBashMessages();
+			this._bashService.flushPendingForShutdown((err) => this._publishRuntimeFailure(err));
 			this._metaRuntime.observeRunBudget(this._runBudget.snapshot());
 			ownedRun.finish(outcome, (event) => {
 				if (resourceLease !== null) {
@@ -3750,6 +3748,7 @@ export class AgentSession {
 			};
 			const committed = this._compactionService.commit(begun, compactionResult, fromExtension);
 			committedCompaction = true;
+			this._turnReliability.noteCompaction();
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
 			observeCompaction(this.sessionManager, "manual", fromExtension, pathEntries, preparation, compactionResult);
 
@@ -4139,6 +4138,7 @@ export class AgentSession {
 				details,
 			};
 			const committed = this._compactionService.commit(begun, result, fromExtension);
+			this._turnReliability.noteCompaction();
 			this.agent.state.messages = this.sessionManager.buildSessionContext().messages;
 			observeCompaction(this.sessionManager, reason, fromExtension, pathEntries, preparation, result);
 
@@ -4942,6 +4942,7 @@ export class AgentSession {
 
 		// Content/safety stop (Fable/Opus/Sonnet): switch model BEFORE delay so retry is not same-model refusal.
 		const failoverTo = await this._maybeFailoverFromSafetyStop(message);
+		if (failoverTo !== undefined) this._turnReliability.noteFailover();
 		// A denied candidate with nowhere left to go ends the turn; retrying it only repeats the denial.
 		if (candidateDenied && failoverTo === undefined) return false;
 		const switchedVia = failoverTo ? `failover ${failoverTo}` : rotatedTo ? `route ${rotatedTo}` : undefined;
@@ -5040,7 +5041,11 @@ export class AgentSession {
 	 * Record a bash execution result in session history.
 	 * Used by executeBash and by extensions that handle bash execution themselves.
 	 */
-	recordBashResult(command: string, result: BashResult, options?: { excludeFromContext?: boolean }): void {
+	recordBashResult(
+		command: string,
+		result: BashResult,
+		options?: { excludeFromContext?: boolean; recordId?: string },
+	): void {
 		this._bashService.recordBashResult(command, result, options);
 	}
 

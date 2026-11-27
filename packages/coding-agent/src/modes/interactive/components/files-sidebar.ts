@@ -1,5 +1,5 @@
 import { type Component, type Focusable, Key, matchesKey } from "omk-tui";
-import type { FilesSidebarModel } from "./files-sidebar-model.ts";
+import { computePreviewDrawerLayout, type FilesSidebarModel } from "./files-sidebar-model.ts";
 import { renderCollapsedFilesRail, renderOpenFilesSidebar } from "./files-sidebar-render.ts";
 
 export interface FilesSidebarCallbacks {
@@ -110,31 +110,36 @@ export class FilesSidebarComponent implements Component, Focusable {
 			this.model.adjustWidth(4);
 			this.cb.requestRender();
 		}
+		if (data === "+") {
+			if (this.model.expandExplorationLimit()) this.cb.requestRender();
+		}
 	}
 
 	private handlePreviewInput(data: string): void {
+		const { bodyRows } = computePreviewDrawerLayout(this.cb.getRows());
+		const pageStep = Math.max(1, bodyRows - 1);
 		if (matchesKey(data, Key.escape)) {
 			this.model.closePreview();
 			this.cb.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.up) || data === "k") {
-			this.model.scrollPreview(-1);
+			this.model.scrollPreview(-1, bodyRows);
 			this.cb.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.down) || data === "j") {
-			this.model.scrollPreview(1);
+			this.model.scrollPreview(1, bodyRows);
 			this.cb.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.pageUp)) {
-			this.model.scrollPreview(-10);
+			this.model.scrollPreview(-pageStep, bodyRows);
 			this.cb.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.pageDown)) {
-			this.model.scrollPreview(10);
+			this.model.scrollPreview(pageStep, bodyRows);
 			this.cb.requestRender();
 			return;
 		}

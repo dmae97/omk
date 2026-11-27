@@ -17,98 +17,18 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
 import { cumulativeCacheReadShare, isUsageInputSemanticsVerified } from "omk-ai";
 import { addSuggestionTotals, type PurposeUsageTotals, summarizeByPurpose } from "./turn-metrics-purpose.ts";
-import {
-	buildTurnMetricRecord,
-	parseTurnMetricRecord,
-	type TurnMetricInput,
-	type TurnMetricRecord,
-	type TurnUsageMetric,
-} from "./turn-metrics-record.ts";
+import { parseTurnMetricRecord, type TurnMetricRecord, type TurnUsageMetric } from "./turn-metrics-record.ts";
+import type { MetricFieldCoverage } from "./turn-metrics-reliability.ts";
 
 export * from "./turn-metrics-record.ts";
-/** Rotate once the active file passes this size. */
-export const DEFAULT_MAX_METRICS_BYTES = 8 * 1024 * 1024;
-export interface TurnMetricsSinkOptions {
-	readonly dir: string;
-	readonly maxBytes?: number;
-	readonly fileName?: string;
-}
-
-/**
- * Append-only JSONL sink. Writes are synchronous and best-effort: metrics must
- * never be the reason a turn fails, so every filesystem error is swallowed and
- * counted instead of thrown.
- */
-export class TurnMetricsSink {
-	private readonly filePath: string;
-	private readonly maxBytes: number;
-	private dropped = 0;
-	private written = 0;
-
-	constructor(options: TurnMetricsSinkOptions) {
-		this.filePath = path.join(options.dir, options.fileName ?? "turns.jsonl");
-		this.maxBytes = Math.max(1024, options.maxBytes ?? DEFAULT_MAX_METRICS_BYTES);
-	}
-
-	get path(): string {
-		return this.filePath;
-	}
-
-	/** Records written successfully this process. */
-	get writtenCount(): number {
-		return this.written;
-	}
-
-	/** Records lost to a filesystem error this process. */
-	get droppedCount(): number {
-		return this.dropped;
-	}
-
-	/** Append one turn. Returns `true` when the line reached disk. */
-	record(input: TurnMetricInput): boolean {
-		let line: string;
-		try {
-			line = `${JSON.stringify(buildTurnMetricRecord(input))}\n`;
-		} catch {
-			this.dropped++;
-			return false;
-		}
-		const bytes = Buffer.byteLength(line, "utf8");
-		if (bytes > this.maxBytes) {
-			this.dropped++;
-			return false;
-		}
-		try {
-			fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-			this.rotateIfNeeded(bytes);
-			fs.appendFileSync(this.filePath, line, { encoding: "utf8", mode: 0o600 });
-			this.written++;
-			return true;
-		} catch {
-			this.dropped++;
-			return false;
-		}
-	}
-
-	private rotateIfNeeded(incomingBytes: number): void {
-		let size: number;
-		try {
-			size = fs.statSync(this.filePath).size;
-		} catch {
-			return; // No file yet.
-		}
-		if (size + incomingBytes <= this.maxBytes) return;
-		try {
-			// Single generation: the previous file is replaced, so disk use stays bounded at 2x.
-			fs.renameSync(this.filePath, `${this.filePath}.1`);
-		} catch {
-			// Rotation failure is not fatal; the next append still succeeds.
-		}
-	}
-}
+export {
+	type MetricFieldCoverage,
+	recordSessionTurnMetrics,
+	TurnReliabilityCollector,
+} from "./turn-metrics-reliability.ts";
+export { DEFAULT_MAX_METRICS_BYTES, TurnMetricsSink, type TurnMetricsSinkOptions } from "./turn-metrics-sink.ts";
 
 export interface ToolAggregate {
 	readonly name: string;
@@ -150,6 +70,8 @@ export interface TurnMetricsSummary {
 	readonly costIsLowerBound: boolean;
 	readonly compactions: number;
 	readonly failovers: number;
+	readonly compactionCoverage: MetricFieldCoverage;
+	readonly failoverCoverage: MetricFieldCoverage;
 	readonly contextCachePlanHitRate?: number;
 	/** Turns where a valid projection's response model differs from the selected model. */
 	readonly provenanceMismatchTurns: number;
@@ -190,6 +112,8 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 	const toolStats = new Map<string, { durations: number[]; failures: number }>();
 	let compactions = 0;
 	let failovers = 0;
+	let compactionsMeasured = 0;
+	let failoversMeasured = 0;
 	let planHits = 0;
 	let planObservations = 0;
 	let provenanceMismatchTurns = 0;
@@ -228,8 +152,14 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		}
 		turnDurations.push(record.durationMs);
 		if (typeof record.timeToFirstChunkMs === "number") firstChunkTimes.push(record.timeToFirstChunkMs);
-		if (record.compacted) compactions++;
-		failovers += record.failovers ?? 0;
+		if (typeof record.compacted === "boolean") {
+			compactionsMeasured++;
+			if (record.compacted) compactions++;
+		}
+		if (typeof record.failovers === "number") {
+			failoversMeasured++;
+			failovers += record.failovers;
+		}
 		if (record.contextCache) {
 			planObservations++;
 			if (record.contextCache.planHit) planHits++;
@@ -298,6 +228,16 @@ export function summarizeTurnMetrics(lines: readonly string[]): TurnMetricsSumma
 		costIsLowerBound: turnsMissingCacheWrite > 0,
 		compactions,
 		failovers,
+		compactionCoverage: {
+			turnsMeasured: compactionsMeasured,
+			turnsUnknown: mainRecords.length - compactionsMeasured,
+			turnsTotal: mainRecords.length,
+		},
+		failoverCoverage: {
+			turnsMeasured: failoversMeasured,
+			turnsUnknown: mainRecords.length - failoversMeasured,
+			turnsTotal: mainRecords.length,
+		},
 		contextCachePlanHitRate: planObservations === 0 ? undefined : planHits / planObservations,
 		provenanceMismatchTurns,
 		tools,
