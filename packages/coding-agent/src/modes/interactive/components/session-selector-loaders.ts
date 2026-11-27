@@ -92,6 +92,7 @@ export function shortenSessionPath(path: string): string {
 }
 
 export function formatSessionDate(date: Date): string {
+	// wall-clock: relative age compared against session file wall-clock timestamp
 	const diffMs = Date.now() - date.getTime();
 	const diffMins = Math.floor(diffMs / 60000);
 	const diffHours = Math.floor(diffMs / 3600000);
