@@ -84,4 +84,53 @@ describe("P0-11: Rust core runtime bridge, live IPC handshake, and fail-safe Nod
 		expect(explicitNode.rolledBackToNode).toBe(false);
 		expect(explicitNode.rollbackReason).toBe("operator_forced_node");
 	});
+
+	it("separates standalone single-binary readiness from Rust core transition readiness and wires runtime selection into main.ts", async () => {
+		const bridge = await import("../src/core/rust-core-runtime-bridge.ts");
+		expect(typeof bridge.evaluateStandaloneBinaryReadiness).toBe("function");
+		expect(typeof bridge.evaluateRustCoreTransitionReadiness).toBe("function");
+		expect(typeof bridge.selectCoreRuntimeAtStartup).toBe("function");
+		expect(typeof bridge.getActiveCoreRuntimeSelection).toBe("function");
+
+		// Standalone binary passing MUST NOT imply Rust transition is complete
+		const binReady = bridge.evaluateStandaloneBinaryReadiness({
+			metadataEmbedded: true,
+			themesBootstrapped: true,
+			zeroExternalJsRuntime: true,
+			cliSubcommandsVerified: ["version", "help", "doctor", "stats", "list-models", "print"],
+			jsonModeVerified: true,
+			ptyInteractiveVerified: true,
+		});
+		const rustReady = bridge.evaluateRustCoreTransitionReadiness({
+			wireHandshakeReachable: true,
+			providerParity: true,
+			toolParity: true,
+			sessionParity: false,
+			recoveryParity: false,
+			entryPointWired: true,
+			failSafeNodeRollbackVerified: true,
+		});
+		expect(binReady.complete).toBe(true);
+		expect(rustReady.complete).toBe(false);
+		expect(rustReady.missing).toContain("sessionParity");
+
+		// Real startup selector records active selection and rolls back cleanly when OMK_CORE_RUNTIME=rust cannot meet parity
+		const sel = bridge.selectCoreRuntimeAtStartup({ OMK_CORE_RUNTIME: "rust" });
+		expect(sel.requested).toBe("rust");
+		expect(sel.active).toBe("node");
+		expect(sel.rolledBackToNode).toBe(true);
+		expect(bridge.getActiveCoreRuntimeSelection()).toEqual(sel);
+
+		// Verify main.ts actually invokes selectCoreRuntimeAtStartup
+		const mainSrc = readFileSync(resolve(REPO_ROOT, "packages/coding-agent/src/main.ts"), "utf8");
+		expect(mainSrc).toContain("selectCoreRuntimeAtStartup");
+
+		// Verify standalone-native-smoke.py exercises doctor, stats, --list-models, --mode json, and OMK_CORE_RUNTIME=rust rollback
+		const smokeSrc = readFileSync(resolve(REPO_ROOT, "scripts/standalone-native-smoke.py"), "utf8");
+		expect(smokeSrc).toContain("'doctor'");
+		expect(smokeSrc).toContain("'stats'");
+		expect(smokeSrc).toContain("'--list-models'");
+		expect(smokeSrc).toContain("'json'");
+		expect(smokeSrc).toContain("OMK_CORE_RUNTIME");
+	});
 });
