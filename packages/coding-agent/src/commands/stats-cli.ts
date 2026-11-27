@@ -6,8 +6,9 @@
  * doing anything. Read-only; it never starts a session.
  */
 
-import { join, resolve } from "node:path";
-import { summarizeTurnMetricsFile, type TurnMetricsSummary } from "../core/turn-metrics.ts";
+import { basename, join, resolve } from "node:path";
+import type { TurnMetricsSummary } from "../core/turn-metrics.ts";
+import { summarizeTurnMetricsDirectory, type TurnMetricsScope } from "../core/turn-metrics-scope.ts";
 
 const USAGE = "Usage: omk stats [--dir <path>] [--json]";
 
@@ -63,29 +64,49 @@ function formatCount(value: number): string {
 }
 
 /** Render the human-readable report. Pure, so its shape is directly testable. */
-export function renderStatsReport(summary: TurnMetricsSummary, filePath: string): string[] {
-	if (summary.turns === 0) {
+export function renderStatsReport(summary: TurnMetricsSummary, filePath: string, scope?: TurnMetricsScope): string[] {
+	if (scope?.status === "error") {
+		const lines = [`Failed to read turn metrics (${filePath}):`];
+		for (const failed of scope.failedFiles) {
+			lines.push(`  read error    ${failed.path} (${failed.code}): ${failed.message}`);
+		}
+		return lines;
+	}
+
+	if (summary.turns === 0 && scope?.status !== "partial") {
 		return [
 			`No turn metrics recorded yet (${filePath}).`,
 			"Metrics are written as sessions run. Set OMK_TURN_METRICS=0 to disable.",
 		];
 	}
 
+	const partialTag = scope?.status === "partial" ? " [partial]" : "";
 	const lines = [
-		`Turn metrics — ${formatCount(summary.turns)} turns across ${formatCount(summary.sessions)} session(s)`,
-		`  models        ${summary.models.length > 0 ? summary.models.join(", ") : "unknown"}`,
-		`  turn duration p50 ${formatMs(summary.turnDurationP50Ms)} · p95 ${formatMs(summary.turnDurationP95Ms)}`,
+		`Turn metrics${partialTag} — ${formatCount(summary.turns)} turns across ${formatCount(summary.sessions)} session(s)`,
 	];
-	if (summary.timeToFirstChunkP50Ms !== undefined) {
-		lines.push(`  first chunk   p50 ${formatMs(summary.timeToFirstChunkP50Ms)}`);
+	if (scope && scope.includedFiles.length > 0) {
+		const names = scope.includedFiles.map((file) => basename(file)).join(", ");
+		lines.push(`  files         ${formatCount(scope.includedFiles.length)} (${names})`);
 	}
-	lines.push(
-		`  input ${formatCount(summary.totals.input)} · output ${formatCount(summary.totals.output)} · cacheRead ${formatCount(summary.totals.cacheRead)} · cacheWrite ${formatCount(summary.totals.cacheWrite ?? 0)}${summary.usageCoverage.turnsMissingCacheWrite > 0 ? ` (+ ${formatCount(summary.usageCoverage.turnsMissingCacheWrite)} turn(s) not reported)` : ""}`,
-		`  cache read share ${formatPercent(summary.cacheReadShare)} of prompt-side usage (input + cacheRead + cacheWrite) · coverage ${formatCount(summary.cacheReadShareCoverage.turnsUsed)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} turns (${formatCount(summary.cacheReadShareCoverage.turnsMissingCacheWrite)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} missing cacheWrite)`,
-		`  cost          estimated ${summary.costIsLowerBound ? "≥ " : ""}$${summary.totalCostUsd.toFixed(4)} (price table${summary.costIsLowerBound ? "; 하한/lower bound: includes turns with unknown cacheWrite" : ""}) · billed ${summary.billedTurns > 0 ? `$${summary.billedCostUsd.toFixed(4)} (provider-reported, ${formatCount(summary.billedTurns)} turn(s))` : "n/a"}`,
-		`  usage coverage ${formatCount(summary.usageCoverage.turnsWithUsage)}/${formatCount(summary.turns)} turns${summary.usageCoverage.turnsMissingUsage > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingUsage)} missing usage` : ""}${summary.usageCoverage.turnsMissingCacheWrite > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingCacheWrite)} missing cacheWrite` : ""}${summary.usageCoverage.unverifiedProviders.length > 0 ? ` · 미검증 (unverified input semantics): ${summary.usageCoverage.unverifiedProviders.join(", ")}` : ""}`,
-		`  compactions ${formatCount(summary.compactions)} · failovers ${formatCount(summary.failovers)} · ctx plan hit ${formatPercent(summary.contextCachePlanHitRate)}`,
-	);
+	if (scope?.periodStart && scope.periodEnd) {
+		lines.push(`  period        ${scope.periodStart} .. ${scope.periodEnd}`);
+	}
+	if (summary.turns > 0) {
+		lines.push(
+			`  models        ${summary.models.length > 0 ? summary.models.join(", ") : "unknown"}`,
+			`  turn duration p50 ${formatMs(summary.turnDurationP50Ms)} · p95 ${formatMs(summary.turnDurationP95Ms)}`,
+		);
+		if (summary.timeToFirstChunkP50Ms !== undefined) {
+			lines.push(`  first chunk   p50 ${formatMs(summary.timeToFirstChunkP50Ms)}`);
+		}
+		lines.push(
+			`  input ${formatCount(summary.totals.input)} · output ${formatCount(summary.totals.output)} · cacheRead ${formatCount(summary.totals.cacheRead)} · cacheWrite ${formatCount(summary.totals.cacheWrite ?? 0)}${summary.usageCoverage.turnsMissingCacheWrite > 0 ? ` (+ ${formatCount(summary.usageCoverage.turnsMissingCacheWrite)} turn(s) not reported)` : ""}`,
+			`  cache read share ${formatPercent(summary.cacheReadShare)} of prompt-side usage (input + cacheRead + cacheWrite) · coverage ${formatCount(summary.cacheReadShareCoverage.turnsUsed)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} turns (${formatCount(summary.cacheReadShareCoverage.turnsMissingCacheWrite)}/${formatCount(summary.cacheReadShareCoverage.turnsTotal)} missing cacheWrite)`,
+			`  cost          estimated ${summary.costIsLowerBound ? "≥ " : ""}$${summary.totalCostUsd.toFixed(4)} (price table${summary.costIsLowerBound ? "; 하한/lower bound: includes turns with unknown cacheWrite" : ""}) · billed ${summary.billedTurns > 0 ? `$${summary.billedCostUsd.toFixed(4)} (provider-reported, ${formatCount(summary.billedTurns)} turn(s))` : "n/a"}`,
+			`  usage coverage ${formatCount(summary.usageCoverage.turnsWithUsage)}/${formatCount(summary.turns)} turns${summary.usageCoverage.turnsMissingUsage > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingUsage)} missing usage` : ""}${summary.usageCoverage.turnsMissingCacheWrite > 0 ? ` · ${formatCount(summary.usageCoverage.turnsMissingCacheWrite)} missing cacheWrite` : ""}${summary.usageCoverage.unverifiedProviders.length > 0 ? ` · 미검증 (unverified input semantics): ${summary.usageCoverage.unverifiedProviders.join(", ")}` : ""}`,
+			`  compactions ${formatCount(summary.compactions)} · failovers ${formatCount(summary.failovers)} · ctx plan hit ${formatPercent(summary.contextCachePlanHitRate)}`,
+		);
+	}
 
 	if (summary.tools.length > 0) {
 		lines.push("", "  tool                 calls   fail%     p50     p95    total");
@@ -93,6 +114,13 @@ export function renderStatsReport(summary: TurnMetricsSummary, filePath: string)
 			lines.push(
 				`  ${tool.name.padEnd(20).slice(0, 20)} ${String(tool.calls).padStart(5)} ${formatPercent(tool.failureRate).padStart(7)} ${formatMs(tool.p50Ms).padStart(7)} ${formatMs(tool.p95Ms).padStart(7)} ${formatMs(tool.totalMs).padStart(8)}`,
 			);
+		}
+	}
+
+	if (scope && scope.failedFiles.length > 0) {
+		lines.push("");
+		for (const failed of scope.failedFiles) {
+			lines.push(`  read error    ${failed.path} (${failed.code}): ${failed.message}`);
 		}
 	}
 
@@ -116,14 +144,16 @@ export function runStatsCli(args: readonly string[], overrides: StatsCliOverride
 	}
 
 	const cwd = resolve(overrides.cwd ?? process.cwd());
-	const dir = parsed.dir ?? process.env.OMK_TURN_METRICS_DIR ?? join(cwd, ".omk", "metrics");
-	const filePath = join(resolve(dir), "turns.jsonl");
-	const summary = summarizeTurnMetricsFile(filePath);
+	const dir = resolve(parsed.dir ?? process.env.OMK_TURN_METRICS_DIR ?? join(cwd, ".omk", "metrics"));
+	const filePath = join(dir, "turns.jsonl");
+	const { summary, scope } = summarizeTurnMetricsDirectory(dir);
+	const exitCode: 0 | 1 = scope.status === "error" ? 1 : 0;
 
 	if (parsed.json) {
-		writeLine(JSON.stringify({ status: "ok", path: filePath, summary }));
-		return { handled: true, exitCode: 0 };
+		const status = scope.status === "error" ? "error" : "ok";
+		writeLine(JSON.stringify({ status, readStatus: scope.status, path: filePath, scope, summary }));
+		return { handled: true, exitCode };
 	}
-	for (const line of renderStatsReport(summary, filePath)) writeLine(line);
-	return { handled: true, exitCode: 0 };
+	for (const line of renderStatsReport(summary, filePath, scope)) writeLine(line);
+	return { handled: true, exitCode };
 }

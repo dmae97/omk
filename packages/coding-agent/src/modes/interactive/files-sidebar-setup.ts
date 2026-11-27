@@ -13,9 +13,13 @@ import {
 import {
 	enableDefaultProcessMouseMode,
 	handleFilesSidebarMouse,
+	isSgrLeftPress,
 	parseSgrMouse,
 	setProcessMouseMode,
 } from "./components/files-sidebar-mouse.ts";
+import { dispatchFilesCommand, dispatchTodosCommand, handleOmkHeaderMouseClick } from "./todos-visibility.ts";
+
+export { runFilesSlashCommand } from "./todos-visibility.ts";
 
 export interface FilesSidebarSetupOptions {
 	readonly ui: TUI;
@@ -34,17 +38,25 @@ export interface FilesSidebarController {
 	focus(): void;
 	setMode(mode: FilesSidebarMode, persist?: boolean): void;
 	setMouseEnabled(enabled: boolean): void;
+	isTodosVisible(): boolean;
+	toggleTodos(): void;
+	setTodosVisible(visible: boolean, persist?: boolean): void;
 	syncRootDir(cwd: string): void;
 	handleCommand(arg: string): string;
+	handleTodosCommand(arg: string): string;
 }
 
 export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSidebarController {
 	const { ui, settingsManager, getCwd, getEditor, insertTextIntoEditor, onStateChange } = options;
 	const initialMode: FilesSidebarMode = settingsManager.getShowFilesSidebar() ? "open" : "hidden";
 	const model = new FilesSidebarModel(getCwd(), initialMode);
-	const setMouseMode = (enable: boolean): void => setProcessMouseMode(enable);
+	let todosVisible = settingsManager.getShowTodos();
+	let mouseEnabled = process.stdout.isTTY === true && process.env.OMK_TUI_MOUSE !== "0";
+	const setMouseMode = (enable: boolean): void => {
+		mouseEnabled = enable;
+		setProcessMouseMode(enable);
+	};
 	enableDefaultProcessMouseMode();
-
 	const syncCwdIfChanged = (): void => {
 		const cwd = getCwd();
 		if (cwd && cwd !== model.getRootDir()) model.setRootDir(cwd);
@@ -119,6 +131,21 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 	ui.addInputListener((data) => {
 		const mouse = parseSgrMouse(data);
 		if (!mouse) return undefined;
+		if (
+			isSgrLeftPress(mouse) &&
+			handleOmkHeaderMouseClick(
+				mouse.col,
+				mouse.row,
+				reservedLeftGutter(ui.terminal.columns, ui.terminal.rows),
+				ui.contentWidth,
+				ui.terminal.rows,
+				model.getMode(),
+				() => controller.toggle(),
+				() => controller.toggleTodos(),
+			)
+		) {
+			return { consume: true };
+		}
 		const consumed = handleFilesSidebarMouse(mouse, {
 			model,
 			termWidth: ui.terminal.columns,
@@ -171,47 +198,38 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 			onStateChange?.();
 			ui.requestRender();
 		},
-		setMouseEnabled(enabled) {
-			setMouseMode(enabled);
+		setMouseEnabled: (enabled) => setMouseMode(enabled),
+		isTodosVisible: () => todosVisible,
+		toggleTodos() {
+			this.setTodosVisible(!todosVisible, true);
+		},
+		setTodosVisible(visible, persist = true) {
+			todosVisible = visible;
+			if (persist) settingsManager.setShowTodos(visible);
+			onStateChange?.();
+			ui.requestRender();
 		},
 		syncRootDir(cwd) {
 			model.setRootDir(cwd);
 			ui.requestRender();
 		},
 		handleCommand(arg) {
-			const raw = arg.trim();
-			const sub = raw.toLowerCase();
-			if (sub === "off" || sub === "hide") {
-				this.setMode("hidden", true);
-				return "Files sidebar hidden (/files on to restore)";
-			}
-			if (sub === "on" || sub === "show" || sub === "open") {
-				this.setMode("open", true);
-				return "Files sidebar open (Alt+E to browse, Ctrl+B/Alt+B to collapse)";
-			}
-			if (sub === "collapse" || sub === "rail") {
-				this.setMode("collapsed", true);
-				return "Files sidebar collapsed to rail";
-			}
-			if (sub === "toggle") {
-				this.toggle();
-				return `Files sidebar: ${model.getMode()}`;
-			}
-			if (sub === "mouse off" || sub === "mouse 0") {
-				setMouseMode(false);
-				return "Files sidebar mouse mode off (drag-select text freely)";
-			}
-			if (sub === "mouse on" || sub === "mouse 1") {
-				setMouseMode(true);
-				return "Files sidebar mouse mode on (click & wheel enabled; Shift+drag selects text)";
-			}
-			if (raw) {
-				model.startSearch(raw);
-				this.focus();
-				return `Searching files for "${raw}" (↑↓ pick, Enter view, Tab insert, Esc clear)`;
-			}
-			this.focus();
-			return "Files focused (↑↓ move, Enter preview, Space/@ insert, / search, Esc back)";
+			return dispatchFilesCommand(
+				{
+					getMode: () => model.getMode(),
+					setMode: (m, persist) => this.setMode(m, persist),
+					toggle: () => this.toggle(),
+					focus: () => this.focus(),
+					startSearch: (q) => model.startSearch(q),
+					setMouseMode,
+					isMouseEnabled: () => mouseEnabled,
+					getSavedShowFilesSidebar: () => settingsManager.getGlobalSettings().showFilesSidebar,
+				},
+				arg,
+			);
+		},
+		handleTodosCommand(arg) {
+			return dispatchTodosCommand(this, arg);
 		},
 	};
 
@@ -219,7 +237,7 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 }
 
 export interface FilesKeyBinder {
-	onAction(action: "app.files.toggle" | "app.files.focus", handler: () => void): void;
+	onAction(action: "app.files.toggle" | "app.files.focus" | "app.todos.toggle", handler: () => void): void;
 }
 
 export function mountFilesSidebarOnMode(
@@ -229,6 +247,7 @@ export function mountFilesSidebarOnMode(
 	getEditor: () => Component & { getText(): string; setText(text: string): void },
 	keyBinder: FilesKeyBinder,
 	onStateChange: () => void,
+	footer?: { setTodosVisibilityGetter?(fn: () => boolean): void },
 ): FilesSidebarController {
 	const ctrl = setupFilesSidebar({
 		ui,
@@ -241,17 +260,9 @@ export function mountFilesSidebarOnMode(
 		},
 		onStateChange,
 	});
+	footer?.setTodosVisibilityGetter?.(() => ctrl.isTodosVisible());
 	keyBinder.onAction("app.files.toggle", () => ctrl.toggle());
 	keyBinder.onAction("app.files.focus", () => ctrl.focus());
+	keyBinder.onAction("app.todos.toggle", () => ctrl.toggleTodos());
 	return ctrl;
-}
-
-export function runFilesSlashCommand(
-	ctrl: FilesSidebarController | undefined,
-	text: string,
-	clearEditor: () => void,
-	showStatus: (msg: string) => void,
-): void {
-	clearEditor();
-	showStatus(ctrl?.handleCommand(text.slice(6)) ?? "Files sidebar unavailable");
 }

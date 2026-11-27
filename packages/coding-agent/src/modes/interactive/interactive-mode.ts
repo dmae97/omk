@@ -876,6 +876,7 @@ export class InteractiveMode {
 				this.footerDataProvider,
 				() => this.ui.viewportTop === 0,
 				() => this.filesSidebar?.model.getMode() ?? "hidden",
+				() => this.filesSidebar?.isTodosVisible() ?? true,
 			);
 			this.headerContainer.addChild(this.builtInHeader);
 		}
@@ -918,7 +919,8 @@ export class InteractiveMode {
 			() => this.session.sessionManager.getCwd(),
 			() => this.editor,
 			this.defaultEditor,
-			() => this.builtInHeader?.invalidate(),
+			() => this.renderWidgets(),
+			this.footer,
 		);
 
 		this.ui.setFocus(this.editor);
@@ -2821,7 +2823,7 @@ export class InteractiveMode {
 			// Handle commands
 			if (/^\/open(?: |$)/.test(text))
 				return runOpenPathCommand(text, this.session.sessionManager.getCwd(), this.showWarning.bind(this));
-			if (/^\/files(?: |$)/.test(text))
+			if (/^\/(?:files|todos)(?: |$)/.test(text))
 				return runFilesSlashCommand(
 					this.filesSidebar,
 					text,

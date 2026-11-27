@@ -105,7 +105,7 @@ function registerTodoChecklist(omk: ExtensionAPI, verify: TodoVerify | undefined
 			// or setWidget is a real bug, so it surfaces instead of being swallowed.
 			if (ctx.hasUI) {
 				const { TodoChecklistComponent } = await import("../../../modes/interactive/components/todo-checklist.ts");
-				ctx.ui.setWidget("omk-todo", () => new TodoChecklistComponent(() => snapshot), {
+				ctx.ui.setWidget("omk-todo", () => new TodoChecklistComponent(() => snapshot, { showToggleButton: true }), {
 					placement: "aboveEditor",
 				});
 			}

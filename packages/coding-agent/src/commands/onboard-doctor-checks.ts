@@ -14,16 +14,17 @@ import {
 	PROVIDER_CREDENTIAL_SOURCES,
 } from "../core/external-credential-sources.ts";
 import { ModelRegistry } from "../core/model-registry.ts";
-import { findInitialModel } from "../core/model-resolver.ts";
 import type { CheckNode, CheckResult } from "../core/onboarding/check-dag.ts";
 import { AMBIENT_CREDENTIAL_PROVIDERS } from "../core/provider-default-models.ts";
 import { detectSandboxBackend } from "../core/sandbox/backend.ts";
 import { resolveBashSandboxMode } from "../core/sandbox/default-policy.ts";
 import { getToolPath } from "../utils/tools-manager.ts";
-import { findCustomDefaultModel, findCustomProviders, isConfiguredCredentialSource } from "./onboard-doctor-custom.ts";
+import { findCustomProviders } from "./onboard-doctor-custom.ts";
+import { diagnoseDefaultModel } from "./onboard-doctor-settings.ts";
 
 export interface DoctorContext {
 	readonly agentDir: string;
+	readonly cwd: string;
 	readonly env: Readonly<Record<string, string | undefined>>;
 	readonly online: boolean;
 	/** Filled by the credentials check for the default-model check. */
@@ -158,35 +159,7 @@ const defaultModelCheck: CheckNode<DoctorContext> = {
 	run: async (context): Promise<CheckResult> => {
 		const auth = context.auth ?? AuthStorage.inMemory();
 		const registry = ModelRegistry.createReadOnly(auth, join(context.agentDir, "models.json"));
-		const settings = readJsonObject(join(context.agentDir, "settings.json")) ?? {};
-		const result = await findInitialModel({
-			scopedModels: [],
-			isContinuing: false,
-			defaultProvider: typeof settings.defaultProvider === "string" ? settings.defaultProvider : undefined,
-			defaultModelId: typeof settings.defaultModel === "string" ? settings.defaultModel : undefined,
-			modelRegistry: registry,
-		});
-		const model = result.model;
-		if (!model) {
-			const customFallback = findCustomDefaultModel(context.env, registry);
-			if (customFallback) return { status: "pass", summary: customFallback.summary };
-			return { status: "fail", summary: "no usable model", fix: "Configure credentials first (see above)." };
-		}
-		const ambient = AMBIENT_CREDENTIAL_PROVIDERS.has(model.provider);
-		const registryAuthStatus = registry.getProviderAuthStatus(model.provider);
-		let source: string | undefined = registryAuthStatus.source ?? auth.getAuthStatus(model.provider).source;
-		if (!source && !getProviders().includes(model.provider as any)) source = "models.json";
-		source = source ?? (ambient ? "ambient" : "environment");
-		const summary = `${model.provider}/${model.id} (credential: ${source})`;
-		const isConfiguredSource = isConfiguredCredentialSource(source);
-		if (ambient && !isConfiguredSource) {
-			return {
-				status: "warn",
-				summary: `${summary} chosen from ambient cloud credentials`,
-				fix: "If those credentials are not meant for OMK, pick another provider with /login or /model.",
-			};
-		}
-		return { status: "pass", summary };
+		return diagnoseDefaultModel(context.cwd, context.agentDir, context.env, auth, registry, readJsonObject);
 	},
 };
 

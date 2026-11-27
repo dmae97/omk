@@ -16,6 +16,7 @@ const MARK: Readonly<Record<CheckReport["status"], string>> = { pass: "✓", war
 export interface OnboardDoctorDependencies {
 	readonly writeLine?: (line: string) => void;
 	readonly agentDir?: string;
+	readonly cwd?: string;
 	readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -52,6 +53,7 @@ export async function runOnboardDoctorCli(
 	}
 	const context: DoctorContext = {
 		agentDir: dependencies.agentDir ?? getAgentDir(),
+		cwd: dependencies.cwd ?? process.cwd(),
 		env: dependencies.env ?? process.env,
 		online: flags.includes("--online"),
 	};

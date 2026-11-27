@@ -402,4 +402,64 @@ describe("omk stats CLI", () => {
 	it("renders a stable header for an empty summary", () => {
 		expect(renderStatsReport(summarizeTurnMetrics([]), "/tmp/x.jsonl")[0]).toMatch(/No turn metrics/u);
 	});
+
+	it("P1-03: distinguishes file read error from empty metrics with exit code 1", () => {
+		// Create a directory at turns.jsonl so reading it fails with EISDIR (deterministic across root/non-root)
+		fs.mkdirSync(path.join(dir, "turns.jsonl"), { recursive: true });
+		const out: string[] = [];
+		const result = runStatsCli(["stats", "--dir", dir], { writeLine: (line) => out.push(line) });
+		expect(result).toEqual({ handled: true, exitCode: 1 });
+		expect(out.join("\n")).toMatch(/Failed to read turn metrics/u);
+		expect(out.join("\n")).not.toMatch(/No turn metrics recorded yet/u);
+
+		const jsonOut: string[] = [];
+		const jsonResult = runStatsCli(["stats", "--dir", dir, "--json"], { writeLine: (line) => jsonOut.push(line) });
+		expect(jsonResult).toEqual({ handled: true, exitCode: 1 });
+		const payload = JSON.parse(jsonOut[0]);
+		expect(payload.status).toBe("error");
+		expect(payload.readStatus).toBe("error");
+		expect(payload.scope.failedFiles).toHaveLength(1);
+	});
+
+	it("P1-03: reports partial aggregation, included files (active + rotated), and period range", () => {
+		const sink = new TurnMetricsSink({ dir });
+		sink.record(
+			turn({
+				sessionId: "s-old",
+				startedAtEpochMs: Date.UTC(2026, 10, 1, 10, 0, 0),
+				endedAtEpochMs: Date.UTC(2026, 10, 1, 10, 0, 5),
+			}),
+		);
+		// Move first record to rotated archive turns.jsonl.1
+		fs.renameSync(path.join(dir, "turns.jsonl"), path.join(dir, "turns.jsonl.1"));
+		sink.record(
+			turn({
+				sessionId: "s-new",
+				startedAtEpochMs: Date.UTC(2026, 10, 27, 12, 0, 0),
+				endedAtEpochMs: Date.UTC(2026, 10, 27, 12, 0, 4),
+			}),
+		);
+		// Append one malformed line to trigger partial aggregation
+		fs.appendFileSync(path.join(dir, "turns.jsonl"), "{broken json\n", "utf8");
+
+		const out: string[] = [];
+		const result = runStatsCli(["stats", "--dir", dir], { writeLine: (line) => out.push(line) });
+		expect(result).toEqual({ handled: true, exitCode: 0 });
+		const text = out.join("\n");
+		expect(text).toContain("[partial]");
+		expect(text).toContain("turns.jsonl.1");
+		expect(text).toContain("turns.jsonl");
+		expect(text).toContain("2026-11-01T10:00:00.000Z");
+		expect(text).toContain("2026-11-27T12:00:04.000Z");
+		expect(text).toContain("1 unparseable line(s) skipped");
+
+		const jsonOut: string[] = [];
+		runStatsCli(["stats", "--dir", dir, "--json"], { writeLine: (line) => jsonOut.push(line) });
+		const payload = JSON.parse(jsonOut[0]);
+		expect(payload.readStatus).toBe("partial");
+		expect(payload.summary.turns).toBe(2);
+		expect(payload.scope.includedFiles).toHaveLength(2);
+		expect(payload.scope.periodStart).toBe("2026-11-01T10:00:00.000Z");
+		expect(payload.scope.periodEnd).toBe("2026-11-27T12:00:04.000Z");
+	});
 });

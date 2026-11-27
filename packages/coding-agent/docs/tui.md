@@ -358,6 +358,13 @@ verification, context, usage, MCP and runtime data with a borderless section lay
   tmux session with the environment flag, or configure a local launcher to create
   a dedicated tmux session first. Without the flag, the native rail is unchanged.
 
+## Files sidebar, mouse mode, and TODOS visibility
+
+- **Left Files sidebar**: Enabled by default (`showFilesSidebar: true`) when the terminal is wide enough (`>= 96` columns). Precedence: saved `settings.json` `showFilesSidebar` > `OMK_FILES_SIDEBAR=0` > default on.
+- **Persistence**: `Ctrl+B` / `Alt+B`, `/files toggle`, `/files show`, and `/files hide` save `showFilesSidebar` to global `settings.json`. `/files collapse` is session-only. Run `/files help` or `/files status` to inspect live state, precedence, and persistence.
+- **SGR mouse mode**: Enabled by default in interactive TTYs (`process.stdout.isTTY`) unless `OMK_TUI_MOUSE=0`. Supports clicking files/folders, clicking the top-bar `◧ Files` and `☑ Todos` chips, and mouse wheel scrolling in the sidebar, preview drawer, and chat history. `/files mouse on|off` changes mouse mode for the current session only (not saved). Hold `Shift` while dragging to select terminal text.
+- **TODOS hide/show toggle**: Active TODOS widgets can be collapsed to a single-line summary banner without clearing tasks. Click the top-bar `☑ Todos ▾` / `☐ Todos ▸` button, press `Alt+T`, or run `/todos` (`/todos show`, `/todos hide`, `/todos status`). Precedence: saved `settings.json` `showTodos` > `OMK_SHOW_TODOS=0` > default on.
+
 ## Keyboard Input
 
 Use `matchesKey()` for key detection:

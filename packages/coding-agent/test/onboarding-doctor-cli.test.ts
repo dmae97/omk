@@ -21,9 +21,9 @@ describe("omk doctor", () => {
 		rmSync(root, { recursive: true, force: true });
 	});
 
-	const run = async (args: string[], env: Record<string, string | undefined> = { HOME: root }) => {
+	const run = async (args: string[], env: Record<string, string | undefined> = { HOME: root }, cwd: string = root) => {
 		const lines: string[] = [];
-		const outcome = await runOnboardDoctorCli(args, { writeLine: (line) => lines.push(line), agentDir, env });
+		const outcome = await runOnboardDoctorCli(args, { writeLine: (line) => lines.push(line), agentDir, env, cwd });
 		return { ...outcome, output: lines.join("\n") };
 	};
 
@@ -162,5 +162,101 @@ describe("omk doctor", () => {
 		const model = report.checks.find((check) => check.id === "default-model");
 		expect(model?.status).toBe("pass");
 		expect(model?.summary).toContain("kimi-coding (custom:ollama)/llama3");
+	});
+
+	it("P1-01: reflects project .omk/settings.json defaultProvider/defaultModel over global settings", async () => {
+		mkdirSync(agentDir, { recursive: true });
+		const projectDir = join(root, "proj");
+		mkdirSync(join(projectDir, ".omk"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "auth.json"),
+			JSON.stringify({
+				anthropic: { type: "api_key", key: "sk-ant-test" },
+				openai: { type: "api_key", key: "sk-openai-test" },
+			}),
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ defaultProvider: "anthropic", defaultModel: "claude-sonnet-4-6" }),
+		);
+		writeFileSync(
+			join(projectDir, ".omk", "settings.json"),
+			JSON.stringify({ defaultProvider: "openai", defaultModel: "gpt-5.4" }),
+		);
+
+		const outcome = await run(["doctor", "--json"], { HOME: root }, projectDir);
+		const report = JSON.parse(outcome.output) as {
+			checks: Array<{ id: string; status: string; summary: string; data?: Record<string, unknown> }>;
+		};
+		const model = report.checks.find((check) => check.id === "default-model");
+		expect(model?.status).toBe("pass");
+		expect(model?.summary).toContain("openai/gpt-5.4");
+		expect(model?.summary).toContain("project settings");
+		expect(model?.data).toMatchObject({
+			settingsSource: "project",
+			configuredModel: "openai/gpt-5.4",
+			resolvedModel: "openai/gpt-5.4",
+			matchesConfigured: true,
+		});
+	});
+
+	it("P1-01: aligns with enabledModels runtime scope and explains difference from defaultModel", async () => {
+		mkdirSync(agentDir, { recursive: true });
+		const projectDir = join(root, "proj-scoped");
+		mkdirSync(join(projectDir, ".omk"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "auth.json"),
+			JSON.stringify({
+				anthropic: { type: "api_key", key: "sk-ant-test" },
+				openai: { type: "api_key", key: "sk-openai-test" },
+			}),
+		);
+		writeFileSync(
+			join(projectDir, ".omk", "settings.json"),
+			JSON.stringify({
+				defaultProvider: "anthropic",
+				defaultModel: "claude-sonnet-4-6",
+				enabledModels: ["openai/gpt-5.4"],
+			}),
+		);
+
+		const outcome = await run(["doctor", "--json"], { HOME: root }, projectDir);
+		const report = JSON.parse(outcome.output) as {
+			checks: Array<{ id: string; status: string; summary: string; data?: Record<string, unknown> }>;
+		};
+		const model = report.checks.find((check) => check.id === "default-model");
+		expect(model?.status).toBe("warn");
+		expect(model?.summary).toContain("openai/gpt-5.4");
+		expect(model?.summary).toContain("enabledModels");
+		expect(model?.data).toMatchObject({
+			configuredModel: "anthropic/claude-sonnet-4-6",
+			resolvedModel: "openai/gpt-5.4",
+			matchesConfigured: false,
+		});
+	});
+
+	it("P1-01: explains divergence when configured default model is missing from static catalog", async () => {
+		mkdirSync(agentDir, { recursive: true });
+		writeFileSync(
+			join(agentDir, "auth.json"),
+			JSON.stringify({ anthropic: { type: "api_key", key: "sk-ant-test" } }),
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ defaultProvider: "google-proxy", defaultModel: "gemini-4-neon" }),
+		);
+
+		const outcome = await run(["doctor", "--json"], { HOME: root }, root);
+		const report = JSON.parse(outcome.output) as {
+			checks: Array<{ id: string; status: string; summary: string; data?: Record<string, unknown> }>;
+		};
+		const model = report.checks.find((check) => check.id === "default-model");
+		expect(model?.status).toBe("warn");
+		expect(model?.summary).toContain("google-proxy/gemini-4-neon");
+		expect(model?.data).toMatchObject({
+			configuredModel: "google-proxy/gemini-4-neon",
+			matchesConfigured: false,
+		});
+		expect(typeof model?.data?.divergenceReason).toBe("string");
 	});
 });
