@@ -4,13 +4,11 @@
 
 import assert from "node:assert";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 import { formatImageFallback } from "../src/image-fallback.ts";
 import { shortenImagePath } from "../src/image-path.ts";
-
-const home = homedir();
 
 describe("formatImageFallback", () => {
 	it("renders only the mime type when nothing else is given", () => {
@@ -25,9 +23,10 @@ describe("formatImageFallback", () => {
 	});
 
 	it("shows a plain absolute path when hyperlinks are off", () => {
+		const filename = join(tmpdir(), "omk-image-fallback-cat.png");
 		assert.strictEqual(
-			formatImageFallback("image/png", { widthPx: 10, heightPx: 20 }, "/tmp/cat.png", false),
-			"[Image: /tmp/cat.png [image/png] 10x20]",
+			formatImageFallback("image/png", { widthPx: 10, heightPx: 20 }, filename, false),
+			`[Image: ${filename} [image/png] 10x20]`,
 		);
 	});
 
@@ -48,9 +47,10 @@ describe("formatImageFallback", () => {
 	});
 
 	it("shortens paths under the home directory", () => {
+		const filename = join(homedir(), "pics", "cat.png");
 		assert.strictEqual(
-			formatImageFallback("image/png", undefined, `${home}/pics/cat.png`, false),
-			"[Image: ~/pics/cat.png [image/png]]",
+			formatImageFallback("image/png", undefined, filename, false),
+			`[Image: ~${sep}pics${sep}cat.png [image/png]]`,
 		);
 	});
 });
