@@ -20,6 +20,7 @@ import {
 import type { LoadoutAccessPolicy } from "./loadout-access-policy.ts";
 import { assertLoadoutAccess, decideLoadoutAccess } from "./loadout-access-policy.ts";
 import type { BashExecutionMessage } from "./messages.ts";
+import { SessionBashResultQueue } from "./session-bash-queue.ts";
 import type { SessionBashRuntime } from "./session-bash-runtime.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import { type BashOperations, type BashSandboxPreflight, createLocalBashOperations } from "./tools/bash.ts";
@@ -68,7 +69,7 @@ function buildSandboxDeniedBashResult(reason: string): BashResult {
 
 export class SessionBashService {
 	private readonly abortControllers = new Set<AbortController>();
-	private pendingBashMessages: BashExecutionMessage[] = [];
+	private readonly pendingBashQueue = new SessionBashResultQueue();
 	private readonly deps: SessionBashServiceDeps;
 
 	constructor(deps: SessionBashServiceDeps) {
@@ -195,7 +196,11 @@ export class SessionBashService {
 	 * Record a bash execution result in session history.
 	 * Used by executeBash and by extensions that handle bash execution themselves.
 	 */
-	recordBashResult(command: string, result: BashResult, options?: { excludeFromContext?: boolean }): void {
+	recordBashResult(
+		command: string,
+		result: BashResult,
+		options?: { excludeFromContext?: boolean; recordId?: string },
+	): void {
 		const bashMessage: BashExecutionMessage = {
 			role: "bashExecution",
 			command,
@@ -207,14 +212,13 @@ export class SessionBashService {
 			timestamp: Date.now(),
 			excludeFromContext: options?.excludeFromContext,
 		};
-
-		// If agent is streaming, defer adding to avoid breaking tool_use/tool_result ordering
-		if (this.deps.isStreaming()) {
-			this.pendingBashMessages.push(bashMessage);
-		} else {
-			this.deps.pushMessage(bashMessage);
-			this.deps.appendMessage(bashMessage);
-		}
+		this.pendingBashQueue.record(
+			bashMessage,
+			this.deps.isStreaming(),
+			this.deps.pushMessage,
+			this.deps.appendMessage,
+			options?.recordId,
+		);
 	}
 
 	/** Request cancellation for every command still owned by this session. */
@@ -227,16 +231,22 @@ export class SessionBashService {
 	}
 
 	get hasPendingBashMessages(): boolean {
-		return this.pendingBashMessages.length > 0;
+		return this.pendingBashQueue.hasPending;
 	}
 
 	/** Flush queued results after the agent turn completes (ordering contract). */
 	flushPending(): void {
-		if (this.pendingBashMessages.length === 0) return;
-		for (const bashMessage of this.pendingBashMessages) {
-			this.deps.pushMessage(bashMessage);
-			this.deps.appendMessage(bashMessage);
+		this.pendingBashQueue.flush(this.deps.pushMessage, this.deps.appendMessage);
+	}
+
+	/** Flush queued results during settlement/shutdown without aborting cleanup on persistence errors. */
+	flushPendingForShutdown(onError?: (error: unknown) => void): boolean {
+		try {
+			this.flushPending();
+			return false;
+		} catch (error) {
+			onError?.(error);
+			return true;
 		}
-		this.pendingBashMessages = [];
 	}
 }
