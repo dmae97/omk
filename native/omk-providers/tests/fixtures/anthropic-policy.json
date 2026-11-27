@@ -4,7 +4,7 @@
     "scripts/fixtures/anthropic-policy-recorder.ts": "ec5f988bf32b225511f6d4a54138ba6261fc3360f58d9e9ea4b4dc64ad95376d",
     "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
     "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
-    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/ai/src/providers/anthropic-compat.ts": "c74ab6455c67d8066c9fe59610cf7343e0dd82c05ea8dfcc682ef08aad23dd00",
     "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff"
   },
   "cases": [

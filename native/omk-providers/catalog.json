@@ -2,7 +2,7 @@
   "schema": "omk.model-catalog.v1",
   "source": {
     "scripts/fixtures/catalog-recorder.ts": "9f4bdd03305282699b57fefaef9811eea8a7dfdf639d91552dbd54131e74b1ee",
-    "packages/ai/src/models.generated.ts": "f2134e37d29eb6fc3692becb10144f237accff857a14ea0f5becbf7d25e7691d",
+    "packages/ai/src/models.generated.ts": "da6736bcdb3ecbc0e939fc86e0c736dde4cd6eba81c1c8ca4ad9eafcf660e344",
     "packages/ai/src/models.ts": "5ba2350fc544a9b2e281f714d40e2eeaea179ffb0e1e0aaad246cb09cfb2b333",
     "packages/ai/src/providers/grok-thinking.ts": "f4bc6166052f27deca753c134074125d36b183af0b66bd8b77fc6990fdd1fca2",
     "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff",
@@ -4504,6 +4504,39 @@
         "output": 20,
         "cacheRead": 0.2,
         "cacheWrite": 5
+      },
+      "contextWindow": 1000000,
+      "maxTokens": 128000
+    },
+    {
+      "id": "claude-opus-5-6",
+      "name": "Claude Opus 5.6",
+      "api": "anthropic-messages",
+      "provider": "anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "compat": {
+        "forceAdaptiveThinking": true,
+        "supportsDisabledThinking": false
+      },
+      "reasoning": true,
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "input": [
+        "text",
+        "image"
+      ],
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
       },
       "contextWindow": 1000000,
       "maxTokens": 128000

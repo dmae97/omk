@@ -4,7 +4,7 @@
     "scripts/fixtures/anthropic-cache-recorder.ts": "b37fcb4b1eaa3926939db0cbaf5055106e42acf93f9f68fdb879e81291ceb589",
     "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
     "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
-    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/ai/src/providers/anthropic-compat.ts": "c74ab6455c67d8066c9fe59610cf7343e0dd82c05ea8dfcc682ef08aad23dd00",
     "packages/ai/src/providers/prompt-cache.ts": "d91900005c5a146e33b3276d02100a0da3dfe57f718301fc77c12cad23e8329d",
     "packages/ai/src/providers/tool-schema.ts": "523a0642c2c62b48d84efd9c81e4a58e83f39a217dbcc5512ff3983bdedd9edb",
     "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
