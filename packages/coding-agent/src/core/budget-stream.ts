@@ -13,6 +13,7 @@ export function wrapBudgetStream(
 	budget: RunBudget,
 	admission: RequestAdmissionGuard = createRequestAdmissionGuard(requestAdmissionPolicyFromEnv()),
 	prefixCauses?: PrefixBoundaryCauseHolder,
+	onUsage?: (tokens: number) => void,
 ): StreamFn {
 	const trace = requestTraceFromEnv(budget.signal);
 	const wrapped: StreamFn = async (model, context, options) => {
@@ -54,6 +55,29 @@ export function wrapBudgetStream(
 				(message) => {
 					try {
 						if (traceId) trace?.terminal(traceId, message);
+						const usage = (
+							message as
+								| {
+										usage?: {
+											totalTokens?: number;
+											input?: number;
+											output?: number;
+											cacheRead?: number;
+											cacheWrite?: number;
+										};
+								  }
+								| undefined
+						)?.usage;
+						if (usage && onUsage) {
+							const total =
+								typeof usage.totalTokens === "number" && usage.totalTokens > 0
+									? usage.totalTokens
+									: (usage.input ?? 0) +
+										(usage.output ?? 0) +
+										(usage.cacheRead ?? 0) +
+										(usage.cacheWrite ?? 0);
+							if (total > 0) onUsage(total);
+						}
 					} catch {
 						/* Trace failure is not a new execution. */
 					} finally {
