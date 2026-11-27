@@ -1,4 +1,3 @@
-import * as os from "node:os";
 import {
 	type Component,
 	Container,
@@ -17,6 +16,12 @@ import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
 import { SessionSearchController } from "./session-selector-async-search.ts";
+import {
+	formatSessionCapNotice,
+	formatSessionDate,
+	type SessionListCapInfo,
+	shortenSessionPath as shortenPath,
+} from "./session-selector-loaders.ts";
 import { hasSessionName, type NameFilter, type SortMode } from "./session-selector-search.ts";
 import {
 	buildSessionTree,
@@ -26,31 +31,6 @@ import {
 } from "./session-selector-tree.ts";
 
 type SessionScope = "current" | "all";
-
-function shortenPath(path: string): string {
-	const home = os.homedir();
-	if (!path) return path;
-	if (path.startsWith(home)) {
-		return `~${path.slice(home.length)}`;
-	}
-	return path;
-}
-
-function formatSessionDate(date: Date): string {
-	const now = new Date();
-	const diffMs = now.getTime() - date.getTime();
-	const diffMins = Math.floor(diffMs / 60000);
-	const diffHours = Math.floor(diffMs / 3600000);
-	const diffDays = Math.floor(diffMs / 86400000);
-
-	if (diffMins < 1) return "now";
-	if (diffMins < 60) return `${diffMins}m`;
-	if (diffHours < 24) return `${diffHours}h`;
-	if (diffDays < 7) return `${diffDays}d`;
-	if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
-	if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo`;
-	return `${Math.floor(diffDays / 365)}y`;
-}
 
 class SessionSelectorHeader implements Component {
 	private scope: SessionScope;
@@ -64,7 +44,7 @@ class SessionSelectorHeader implements Component {
 	private statusMessage: { type: "info" | "error"; message: string } | null = null;
 	private statusTimeout: ReturnType<typeof setTimeout> | null = null;
 	private showRenameHint = false;
-
+	private capNotice: string | undefined;
 	constructor(scope: SessionScope, sortMode: SortMode, nameFilter: NameFilter, requestRender: () => void) {
 		this.scope = scope;
 		this.sortMode = sortMode;
@@ -100,6 +80,9 @@ class SessionSelectorHeader implements Component {
 
 	setShowRenameHint(show: boolean): void {
 		this.showRenameHint = show;
+	}
+	setCapNotice(cap: SessionListCapInfo | undefined): void {
+		this.capNotice = formatSessionCapNotice(cap);
 	}
 
 	setConfirmingDeletePath(path: string | null): void {
@@ -181,7 +164,9 @@ class SessionSelectorHeader implements Component {
 			hintLine2 = truncateToWidth(hint2, width, "…");
 		}
 
-		return [`${left}${" ".repeat(spacing)}${rightText}`, hintLine1, hintLine2];
+		const rows = [`${left}${" ".repeat(spacing)}${rightText}`, hintLine1, hintLine2];
+		if (this.capNotice) rows.push(theme.fg("dim", truncateToWidth(this.capNotice, width, "…")));
+		return rows;
 	}
 }
 
@@ -221,6 +206,7 @@ class SessionList implements Component, Focusable {
 	public onDeleteSession?: (sessionPath: string) => Promise<void>;
 	public onRenameSession?: (sessionPath: string) => void;
 	public onError?: (message: string) => void;
+	public onQueryChange?: (query: string) => void;
 	private maxVisible: number = 10; // Max sessions visible (one line each)
 
 	// Focusable implementation - propagate to searchInput for IME cursor positioning
@@ -280,6 +266,7 @@ class SessionList implements Component, Focusable {
 
 	private filterSessions(query: string): void {
 		const trimmed = query.trim();
+		if (trimmed) this.onQueryChange?.(trimmed);
 		const nameFiltered =
 			this.nameFilter === "all" ? this.allSessions : this.allSessions.filter((session) => hasSessionName(session));
 
@@ -548,7 +535,11 @@ class SessionList implements Component, Focusable {
 	}
 }
 
-type SessionsLoader = (onProgress?: SessionListProgress) => Promise<SessionInfo[]>;
+type SessionsLoader = {
+	(onProgress?: SessionListProgress): Promise<SessionInfo[]>;
+	readonly loadUncapped?: (onProgress?: SessionListProgress) => Promise<SessionInfo[]>;
+	readonly getCapInfo?: () => SessionListCapInfo | undefined;
+};
 
 /**
  * Component that renders a session selector
@@ -592,7 +583,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 	private currentLoading = false;
 	private allLoading = false;
 	private allLoadSeq = 0;
-
+	private expandingOlder = new Set<SessionScope>();
 	private mode: "list" | "rename" = "list";
 	private renameInput = new Input();
 	private renameTargetPath: string | null = null;
@@ -662,6 +653,9 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		);
 
 		this.sessionList.onSearchUpdate = this.requestRender;
+		this.sessionList.onQueryChange = () => {
+			void this.expandOlderIfCapped(this.scope);
+		};
 		this.buildBaseLayout(this.sessionList);
 
 		this.renameInput.onSubmit = (value) => {
@@ -839,7 +833,9 @@ export class SessionSelectorComponent extends Container implements Focusable {
 			if (scope !== this.scope) return;
 			if (seq !== undefined && seq !== this.allLoadSeq) return;
 
+			const activeLoader = scope === "current" ? this.currentSessionsLoader : this.allSessionsLoader;
 			this.header.setLoading(false);
+			this.header.setCapNotice(activeLoader.getCapInfo?.());
 			this.sessionList.setSessions(sessions, showCwd);
 			this.requestRender();
 
@@ -895,6 +891,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 
 			if (this.allSessions !== null) {
 				this.header.setLoading(false);
+				this.header.setCapNotice(this.allSessionsLoader.getCapInfo?.());
 				this.sessionList.setSessions(this.allSessions, true);
 				this.requestRender();
 				return;
@@ -909,8 +906,27 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		this.scope = "current";
 		this.header.setScope(this.scope);
 		this.header.setLoading(this.currentLoading);
+		this.header.setCapNotice(this.currentSessionsLoader.getCapInfo?.());
 		this.sessionList.setSessions(this.currentSessions ?? [], false);
 		this.requestRender();
+	}
+
+	private async expandOlderIfCapped(scope: SessionScope): Promise<void> {
+		const loader = scope === "current" ? this.currentSessionsLoader : this.allSessionsLoader;
+		if (!loader.loadUncapped || !loader.getCapInfo?.()?.truncated || this.expandingOlder.has(scope)) return;
+		this.expandingOlder.add(scope);
+		try {
+			const full = await loader.loadUncapped();
+			if (this.disposed) return;
+			if (scope === "current") this.currentSessions = full;
+			else this.allSessions = full;
+			if (scope !== this.scope) return;
+			this.header.setCapNotice(loader.getCapInfo?.());
+			this.sessionList.setSessions(full, scope === "all");
+			this.requestRender();
+		} finally {
+			this.expandingOlder.delete(scope);
+		}
 	}
 
 	getSessionList(): SessionList {
