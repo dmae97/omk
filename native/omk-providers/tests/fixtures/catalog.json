@@ -2,7 +2,7 @@
   "schema": "omk.model-overlay.v1",
   "source": {
     "scripts/fixtures/catalog-recorder.ts": "9f4bdd03305282699b57fefaef9811eea8a7dfdf639d91552dbd54131e74b1ee",
-    "packages/ai/src/models.generated.ts": "f2134e37d29eb6fc3692becb10144f237accff857a14ea0f5becbf7d25e7691d",
+    "packages/ai/src/models.generated.ts": "da6736bcdb3ecbc0e939fc86e0c736dde4cd6eba81c1c8ca4ad9eafcf660e344",
     "packages/ai/src/models.ts": "5ba2350fc544a9b2e281f714d40e2eeaea179ffb0e1e0aaad246cb09cfb2b333",
     "packages/ai/src/providers/grok-thinking.ts": "f4bc6166052f27deca753c134074125d36b183af0b66bd8b77fc6990fdd1fca2",
     "packages/coding-agent/src/core/model-registry.ts": "53fba00330a076d14b020ed242903387e5b16683ab39bb5048dcf7fc8b27b7ff",
@@ -15,7 +15,7 @@
       "overlay": "{}",
       "expected": {
         "invalid": true,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -346,6 +346,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -487,6 +520,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -507,6 +544,584 @@
     {
       "id": "custom-defaults",
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid/v2/\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"},{\"id\":\"two\",\"maxTokens\":42,\"input\":[\"text\",\"image\"]}]}}}",
+      "expected": {
+        "invalid": false,
+        "total": 2250,
+        "models": [
+          {
+            "id": "claude-fable-5",
+            "name": "Claude Fable 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 1,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-1",
+            "name": "Claude Fable 5.1",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 0.25,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-2",
+            "name": "Claude Fable 5.2",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 8,
+              "output": 40,
+              "cacheRead": 0.2,
+              "cacheWrite": 10
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "name": "Claude Haiku 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5",
+            "name": "Claude Opus 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5-20251101",
+            "name": "Claude Opus 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-7",
+            "name": "Claude Opus 4.7",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-8",
+            "name": "Claude Opus 4.8",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5",
+            "name": "Claude Opus 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-5",
+            "name": "Claude Opus 5.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 4,
+              "output": 20,
+              "cacheRead": 0.2,
+              "cacheWrite": 5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "name": "Claude Sonnet 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 10,
+              "cacheRead": 0.2,
+              "cacheWrite": 2.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "one",
+            "name": "one",
+            "api": "anthropic-messages",
+            "provider": "synthetic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 16384
+          },
+          {
+            "id": "two",
+            "name": "two",
+            "api": "anthropic-messages",
+            "provider": "synthetic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 42
+          }
+        ],
+        "available": [
+          [
+            "anthropic",
+            "claude-fable-5"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-1"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-2"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5-20251001"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5-20251101"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-7"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-8"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5-20250929"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-5"
+          ],
+          [
+            "synthetic",
+            "one"
+          ],
+          [
+            "synthetic",
+            "two"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "builtin-inheritance",
+      "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"synthetic-new\"}]}}}",
       "expected": {
         "invalid": false,
         "total": 2249,
@@ -840,121 +1455,25 @@
             "maxTokens": 128000
           },
           {
-            "id": "claude-sonnet-4-5",
-            "name": "Claude Sonnet 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-5-20250929",
-            "name": "Claude Sonnet 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-5",
-            "name": "Claude Sonnet 5",
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
             "api": "anthropic-messages",
             "provider": "anthropic",
             "baseUrl": "https://api.anthropic.com",
             "compat": {
               "forceAdaptiveThinking": true,
-              "supportsTemperature": false
+              "supportsDisabledThinking": false
             },
             "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 2,
-              "output": 10,
-              "cacheRead": 0.2,
-              "cacheWrite": 2.5
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
             },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "one",
-            "name": "one",
-            "api": "anthropic-messages",
-            "provider": "synthetic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": false,
-            "input": [
-              "text"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 128000,
-            "maxTokens": 16384
-          },
-          {
-            "id": "two",
-            "name": "two",
-            "api": "anthropic-messages",
-            "provider": "synthetic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": false,
             "input": [
               "text",
               "image"
@@ -964,418 +1483,6 @@
               "output": 0,
               "cacheRead": 0,
               "cacheWrite": 0
-            },
-            "contextWindow": 128000,
-            "maxTokens": 42
-          }
-        ],
-        "available": [
-          [
-            "anthropic",
-            "claude-fable-5"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-1"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-2"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5-20251001"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5-20251101"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-7"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-8"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5-20250929"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-5"
-          ],
-          [
-            "synthetic",
-            "one"
-          ],
-          [
-            "synthetic",
-            "two"
-          ]
-        ]
-      }
-    },
-    {
-      "id": "builtin-inheritance",
-      "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"synthetic-new\"}]}}}",
-      "expected": {
-        "invalid": false,
-        "total": 2248,
-        "models": [
-          {
-            "id": "claude-fable-5",
-            "name": "Claude Fable 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 1,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-1",
-            "name": "Claude Fable 5.1",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 0.25,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-2",
-            "name": "Claude Fable 5.2",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 8,
-              "output": 40,
-              "cacheRead": 0.2,
-              "cacheWrite": 10
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-haiku-4-5",
-            "name": "Claude Haiku 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-haiku-4-5-20251001",
-            "name": "Claude Haiku 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5",
-            "name": "Claude Opus 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5-20251101",
-            "name": "Claude Opus 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-7",
-            "name": "Claude Opus 4.7",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-8",
-            "name": "Claude Opus 4.8",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5",
-            "name": "Claude Opus 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5-5",
-            "name": "Claude Opus 5.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 4,
-              "output": 20,
-              "cacheRead": 0.2,
-              "cacheWrite": 5
             },
             "contextWindow": 1000000,
             "maxTokens": 128000
@@ -1541,6 +1648,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -1567,7 +1678,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"baseUrl\":\"https://synthetic.invalid/route/V12/\",\"compat\":{\"supportsEagerToolInputStreaming\":false}}}}",
       "expected": {
         "invalid": false,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -1918,6 +2029,40 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid/route",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false,
+              "supportsEagerToolInputStreaming": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -2067,6 +2212,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -2089,7 +2238,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"modelOverrides\":{\"claude-fable-5\":{\"name\":\"Synthetic\",\"cost\":{\"output\":7},\"reasoning\":false,\"thinkingLevelMap\":{\"off\":null},\"input\":[\"text\"],\"maxTokens\":32}}}}}",
       "expected": {
         "invalid": false,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -2419,6 +2568,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -2560,6 +2742,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -2582,7 +2768,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"claude-fable-5\",\"name\":\"Replacement\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -2898,6 +3084,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -3039,6 +3258,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -3061,7 +3284,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\",\"name\":\"First\"},{\"id\":\"one\",\"name\":\"Last\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2248,
+        "total": 2249,
         "models": [
           {
             "id": "claude-fable-5",
@@ -3387,6 +3610,39 @@
               "output": 20,
               "cacheRead": 0.2,
               "cacheWrite": 5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
             },
             "contextWindow": 1000000,
             "maxTokens": 128000
@@ -3552,6 +3808,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -3576,1428 +3836,6 @@
     {
       "id": "header-precedence",
       "overlay": "{\"providers\":{\"anthropic\":{\"headers\":{\"x-test\":\"provider\",\"x-extra\":\"literal\"},\"modelOverrides\":{\"claude-fable-5\":{\"headers\":{\"x-test\":\"model\"}}}}}}",
-      "expected": {
-        "invalid": false,
-        "total": 2247,
-        "models": [
-          {
-            "id": "claude-fable-5",
-            "name": "Claude Fable 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 1,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-1",
-            "name": "Claude Fable 5.1",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 0.25,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-2",
-            "name": "Claude Fable 5.2",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 8,
-              "output": 40,
-              "cacheRead": 0.2,
-              "cacheWrite": 10
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-haiku-4-5",
-            "name": "Claude Haiku 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-haiku-4-5-20251001",
-            "name": "Claude Haiku 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5",
-            "name": "Claude Opus 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5-20251101",
-            "name": "Claude Opus 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-7",
-            "name": "Claude Opus 4.7",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-8",
-            "name": "Claude Opus 4.8",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5",
-            "name": "Claude Opus 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5-5",
-            "name": "Claude Opus 5.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 4,
-              "output": 20,
-              "cacheRead": 0.2,
-              "cacheWrite": 5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-4-5",
-            "name": "Claude Sonnet 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-5-20250929",
-            "name": "Claude Sonnet 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-5",
-            "name": "Claude Sonnet 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 2,
-              "output": 10,
-              "cacheRead": 0.2,
-              "cacheWrite": 2.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          }
-        ],
-        "available": [
-          [
-            "anthropic",
-            "claude-fable-5"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-1"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-2"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5-20251001"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5-20251101"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-7"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-8"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5-20250929"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-5"
-          ]
-        ]
-      }
-    },
-    {
-      "id": "visibility",
-      "overlay": "{\"providers\":{},\"visibility\":{\"providers\":[\"anthropic\"],\"models\":{\"anthropic\":[\"claude-fable-5\"]}}}",
-      "expected": {
-        "invalid": false,
-        "total": 2247,
-        "models": [
-          {
-            "id": "claude-fable-5",
-            "name": "Claude Fable 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 1,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-1",
-            "name": "Claude Fable 5.1",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 0.25,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-2",
-            "name": "Claude Fable 5.2",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 8,
-              "output": 40,
-              "cacheRead": 0.2,
-              "cacheWrite": 10
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-haiku-4-5",
-            "name": "Claude Haiku 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-haiku-4-5-20251001",
-            "name": "Claude Haiku 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5",
-            "name": "Claude Opus 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5-20251101",
-            "name": "Claude Opus 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-7",
-            "name": "Claude Opus 4.7",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-8",
-            "name": "Claude Opus 4.8",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5",
-            "name": "Claude Opus 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5-5",
-            "name": "Claude Opus 5.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 4,
-              "output": 20,
-              "cacheRead": 0.2,
-              "cacheWrite": 5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-4-5",
-            "name": "Claude Sonnet 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-5-20250929",
-            "name": "Claude Sonnet 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-5",
-            "name": "Claude Sonnet 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://api.anthropic.com",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 2,
-              "output": 10,
-              "cacheRead": 0.2,
-              "cacheWrite": 2.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          }
-        ],
-        "available": [
-          [
-            "anthropic",
-            "claude-fable-5"
-          ]
-        ]
-      }
-    },
-    {
-      "id": "comments-trailing",
-      "overlay": "{// line\n\"providers\":{\"anthropic\":{\"baseUrl\":\"https://synthetic.invalid/v1\",},},}",
-      "expected": {
-        "invalid": false,
-        "total": 2247,
-        "models": [
-          {
-            "id": "claude-fable-5",
-            "name": "Claude Fable 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 1,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-1",
-            "name": "Claude Fable 5.1",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 10,
-              "output": 50,
-              "cacheRead": 0.25,
-              "cacheWrite": 12.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-fable-5-2",
-            "name": "Claude Fable 5.2",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 8,
-              "output": 40,
-              "cacheRead": 0.2,
-              "cacheWrite": 10
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-haiku-4-5",
-            "name": "Claude Haiku 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-haiku-4-5-20251001",
-            "name": "Claude Haiku 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 1,
-              "output": 5,
-              "cacheRead": 0.1,
-              "cacheWrite": 1.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5",
-            "name": "Claude Opus 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-5-20251101",
-            "name": "Claude Opus 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-opus-4-6",
-            "name": "Claude Opus 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-7",
-            "name": "Claude Opus 4.7",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-4-8",
-            "name": "Claude Opus 4.8",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5",
-            "name": "Claude Opus 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 5,
-              "output": 25,
-              "cacheRead": 0.5,
-              "cacheWrite": 6.25
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-opus-5-5",
-            "name": "Claude Opus 5.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsDisabledThinking": false
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "off": null,
-              "minimal": null,
-              "low": "low",
-              "medium": "medium",
-              "high": "high",
-              "xhigh": "xhigh",
-              "max": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 4,
-              "output": 20,
-              "cacheRead": 0.2,
-              "cacheWrite": 5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-4-5",
-            "name": "Claude Sonnet 4.5 (latest)",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-5-20250929",
-            "name": "Claude Sonnet 4.5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 200000,
-            "maxTokens": 64000
-          },
-          {
-            "id": "claude-sonnet-4-6",
-            "name": "Claude Sonnet 4.6",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true
-            },
-            "reasoning": true,
-            "thinkingLevelMap": {
-              "xhigh": "max"
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 3,
-              "output": 15,
-              "cacheRead": 0.3,
-              "cacheWrite": 3.75
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          },
-          {
-            "id": "claude-sonnet-5",
-            "name": "Claude Sonnet 5",
-            "api": "anthropic-messages",
-            "provider": "anthropic",
-            "baseUrl": "https://synthetic.invalid",
-            "compat": {
-              "forceAdaptiveThinking": true,
-              "supportsTemperature": false
-            },
-            "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 2,
-              "output": 10,
-              "cacheRead": 0.2,
-              "cacheWrite": 2.5
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 128000
-          }
-        ],
-        "available": [
-          [
-            "anthropic",
-            "claude-fable-5"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-1"
-          ],
-          [
-            "anthropic",
-            "claude-fable-5-2"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-haiku-4-5-20251001"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-5-20251101"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-7"
-          ],
-          [
-            "anthropic",
-            "claude-opus-4-8"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5"
-          ],
-          [
-            "anthropic",
-            "claude-opus-5-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-5-20250929"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-4-6"
-          ],
-          [
-            "anthropic",
-            "claude-sonnet-5"
-          ]
-        ]
-      }
-    },
-    {
-      "id": "non-anthropic-url",
-      "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"openai-completions\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": false,
         "total": 2248,
@@ -5331,6 +4169,1568 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "name": "Claude Sonnet 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 10,
+              "cacheRead": 0.2,
+              "cacheWrite": 2.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          }
+        ],
+        "available": [
+          [
+            "anthropic",
+            "claude-fable-5"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-1"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-2"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5-20251001"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5-20251101"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-7"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-8"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5-20250929"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "visibility",
+      "overlay": "{\"providers\":{},\"visibility\":{\"providers\":[\"anthropic\"],\"models\":{\"anthropic\":[\"claude-fable-5\"]}}}",
+      "expected": {
+        "invalid": false,
+        "total": 2248,
+        "models": [
+          {
+            "id": "claude-fable-5",
+            "name": "Claude Fable 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 1,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-1",
+            "name": "Claude Fable 5.1",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 0.25,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-2",
+            "name": "Claude Fable 5.2",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 8,
+              "output": 40,
+              "cacheRead": 0.2,
+              "cacheWrite": 10
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "name": "Claude Haiku 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5",
+            "name": "Claude Opus 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5-20251101",
+            "name": "Claude Opus 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-7",
+            "name": "Claude Opus 4.7",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-8",
+            "name": "Claude Opus 4.8",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5",
+            "name": "Claude Opus 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-5",
+            "name": "Claude Opus 5.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 4,
+              "output": 20,
+              "cacheRead": 0.2,
+              "cacheWrite": 5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "name": "Claude Sonnet 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 10,
+              "cacheRead": 0.2,
+              "cacheWrite": 2.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          }
+        ],
+        "available": [
+          [
+            "anthropic",
+            "claude-fable-5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "comments-trailing",
+      "overlay": "{// line\n\"providers\":{\"anthropic\":{\"baseUrl\":\"https://synthetic.invalid/v1\",},},}",
+      "expected": {
+        "invalid": false,
+        "total": 2248,
+        "models": [
+          {
+            "id": "claude-fable-5",
+            "name": "Claude Fable 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 1,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-1",
+            "name": "Claude Fable 5.1",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 0.25,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-2",
+            "name": "Claude Fable 5.2",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 8,
+              "output": 40,
+              "cacheRead": 0.2,
+              "cacheWrite": 10
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "name": "Claude Haiku 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5",
+            "name": "Claude Opus 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5-20251101",
+            "name": "Claude Opus 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-7",
+            "name": "Claude Opus 4.7",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-8",
+            "name": "Claude Opus 4.8",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5",
+            "name": "Claude Opus 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-5",
+            "name": "Claude Opus 5.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 4,
+              "output": 20,
+              "cacheRead": 0.2,
+              "cacheWrite": 5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-4-5",
+            "name": "Claude Sonnet 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-5-20250929",
+            "name": "Claude Sonnet 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 3,
+              "output": 15,
+              "cacheRead": 0.3,
+              "cacheWrite": 3.75
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-sonnet-5",
+            "name": "Claude Sonnet 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://synthetic.invalid",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 2,
+              "output": 10,
+              "cacheRead": 0.2,
+              "cacheWrite": 2.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          }
+        ],
+        "available": [
+          [
+            "anthropic",
+            "claude-fable-5"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-1"
+          ],
+          [
+            "anthropic",
+            "claude-fable-5-2"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-haiku-4-5-20251001"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-5-20251101"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-7"
+          ],
+          [
+            "anthropic",
+            "claude-opus-4-8"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-5-20250929"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-4-6"
+          ],
+          [
+            "anthropic",
+            "claude-sonnet-5"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "non-anthropic-url",
+      "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"openai-completions\",\"baseUrl\":\"https://synthetic.invalid/v1/\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"}]}}}",
+      "expected": {
+        "invalid": false,
+        "total": 2249,
+        "models": [
+          {
+            "id": "claude-fable-5",
+            "name": "Claude Fable 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 1,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-1",
+            "name": "Claude Fable 5.1",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 10,
+              "output": 50,
+              "cacheRead": 0.25,
+              "cacheWrite": 12.5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-fable-5-2",
+            "name": "Claude Fable 5.2",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 8,
+              "output": 40,
+              "cacheRead": 0.2,
+              "cacheWrite": 10
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-haiku-4-5",
+            "name": "Claude Haiku 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "name": "Claude Haiku 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 1,
+              "output": 5,
+              "cacheRead": 0.1,
+              "cacheWrite": 1.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5",
+            "name": "Claude Opus 4.5 (latest)",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-5-20251101",
+            "name": "Claude Opus 4.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          },
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-7",
+            "name": "Claude Opus 4.7",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-4-8",
+            "name": "Claude Opus 4.8",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsTemperature": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5",
+            "name": "Claude Opus 5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 5,
+              "output": 25,
+              "cacheRead": 0.5,
+              "cacheWrite": 6.25
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-5",
+            "name": "Claude Opus 5.5",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 4,
+              "output": 20,
+              "cacheRead": 0.2,
+              "cacheWrite": 5
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -5491,6 +5891,10 @@
           ],
           [
             "anthropic",
+            "claude-opus-5-6"
+          ],
+          [
+            "anthropic",
             "claude-sonnet-4-5"
           ],
           [
@@ -5517,7 +5921,7 @@
       "overlay": "{\"providers\":{\"grok-oauth-proxy\":{\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"old\"}]}}}",
       "expected": {
         "invalid": false,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -5848,6 +6252,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -5986,6 +6423,10 @@
           [
             "anthropic",
             "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
           ],
           [
             "anthropic",
@@ -6011,7 +6452,7 @@
       "overlay": "{",
       "expected": {
         "invalid": true,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -6342,6 +6783,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -6480,6 +6954,10 @@
           [
             "anthropic",
             "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
           ],
           [
             "anthropic",
@@ -6505,7 +6983,7 @@
       "overlay": "{\"providers\":{\"anthropic\":{\"models\":[{\"id\":\"broken\",\"maxTokens\":0}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -6836,6 +7314,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -6974,6 +7485,10 @@
           [
             "anthropic",
             "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
           ],
           [
             "anthropic",
@@ -6999,7 +7514,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"baseUrl\":\"https://synthetic.invalid\",\"apiKey\":\"faux-key\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -7330,6 +7845,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -7468,6 +8016,10 @@
           [
             "anthropic",
             "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
           ],
           [
             "anthropic",
@@ -7493,7 +8045,7 @@
       "overlay": "{\"providers\":{\"synthetic\":{\"api\":\"anthropic-messages\",\"baseUrl\":\"https://synthetic.invalid\",\"models\":[{\"id\":\"one\"}]}}}",
       "expected": {
         "invalid": true,
-        "total": 2247,
+        "total": 2248,
         "models": [
           {
             "id": "claude-fable-5",
@@ -7824,6 +8376,39 @@
             "maxTokens": 128000
           },
           {
+            "id": "claude-opus-5-6",
+            "name": "Claude Opus 5.6",
+            "api": "anthropic-messages",
+            "provider": "anthropic",
+            "baseUrl": "https://api.anthropic.com",
+            "compat": {
+              "forceAdaptiveThinking": true,
+              "supportsDisabledThinking": false
+            },
+            "reasoning": true,
+            "thinkingLevelMap": {
+              "off": null,
+              "minimal": null,
+              "low": "low",
+              "medium": "medium",
+              "high": "high",
+              "xhigh": "xhigh",
+              "max": "max"
+            },
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1000000,
+            "maxTokens": 128000
+          },
+          {
             "id": "claude-sonnet-4-5",
             "name": "Claude Sonnet 4.5 (latest)",
             "api": "anthropic-messages",
@@ -7962,6 +8547,10 @@
           [
             "anthropic",
             "claude-opus-5-5"
+          ],
+          [
+            "anthropic",
+            "claude-opus-5-6"
           ],
           [
             "anthropic",

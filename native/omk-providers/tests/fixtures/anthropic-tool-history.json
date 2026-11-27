@@ -6,7 +6,7 @@
     "scripts/fixtures/anthropic-provider-cases.ts": "c73097643a997be405d583bbdeb09e4fc7d9dc0bfa037f59f5965949c23d638f",
     "packages/ai/src/providers/anthropic.ts": "38e1ca641ad118fb0f66e927979a0533f19ea3f64e37b1778888b1093aa90a46",
     "packages/ai/src/providers/anthropic-client.ts": "6e6555d8d11e649c571060b5ee1042d6cc68c44d9f9250f99dc803fe725efd82",
-    "packages/ai/src/providers/anthropic-compat.ts": "a636a7caec627915d187137228a0151e77b9242bcf0c0add996cf9bed984b017",
+    "packages/ai/src/providers/anthropic-compat.ts": "c74ab6455c67d8066c9fe59610cf7343e0dd82c05ea8dfcc682ef08aad23dd00",
     "packages/ai/src/providers/transform-messages.ts": "f60d2e3c7db909eb9d80d6b670bf0d7fed8aa318aac026d06f4f8a625f9a5610",
     "packages/ai/src/utils/sanitize-unicode.ts": "5749c2cf0819a900e6d84f66e989562bdf4f6bb5fb45958a82b2192f73448bde",
     "packages/ai/src/providers/anthropic-image-guard.ts": "9ca6ebf22d2f83ca5c8b5daf73c50883f3589ff1c48ecbae6b761e40c937abd6",

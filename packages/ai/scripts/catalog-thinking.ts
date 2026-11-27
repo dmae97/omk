@@ -32,7 +32,7 @@ const GPT6_SOL_ID = /(?:^|\/)gpt-6-sol(?:-pro)?(?::batch)?$/;
 // GPT-6 Sol/Luna outside OpenRouter: models.dev declares effort none~max for
 // `openai`, `azure`, and `opencode` Responses routes (checked 2026-09-23).
 const GPT6_SOL_LUNA_ID = /^gpt-6-(?:sol|luna)(?:-pro)?$/;
-const OPUS_55_ID = /(?:^|[./])claude-opus-5-5(?:[^\d]|$)|(?:^|[./])claude-opus-5\.5(?:[^\d]|$)/;
+const OPUS_55_PLUS_ID = /(?:^|[./])claude-opus-5-[56](?:[^\d]|$)|(?:^|[./])claude-opus-5\.[56](?:[^\d]|$)/;
 const GPT6_ASTRA_APIS = ["openai-responses", "azure-openai-responses", "openai-completions"] as const;
 
 /** OMK `ultra` is a selector alias for Astra's documented ceiling, `max`. */
@@ -160,7 +160,7 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 			off: "none", minimal: null, low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max", ultra: null,
 		};
 	}
-	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id) && !OPUS_55_ID.test(model.id)) {
+	if (/(?:^|[/.])claude-opus-5(?:[.@:-]|$)/.test(model.id) && !OPUS_55_PLUS_ID.test(model.id)) {
 		model.thinkingLevelMap = {
 			off: undefined,
 			minimal: null,
@@ -172,8 +172,8 @@ export function applyCurrentThinkingMetadata(model: Model<Api>): void {
 		};
 		if (model.api === "anthropic-messages") model.compat = { ...model.compat, forceAdaptiveThinking: true };
 	}
-	if (OPUS_55_ID.test(model.id)) {
-		// https://platform.claude.com/docs/en/models/opus-5-5/overview: thinking cannot be disabled.
+	if (OPUS_55_PLUS_ID.test(model.id)) {
+		// Opus 5.5+ adaptive thinking cannot be disabled (https://platform.claude.com/docs/en/models/opus-5-5/overview).
 		model.thinkingLevelMap = {
 			off: null,
 			minimal: null,
