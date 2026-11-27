@@ -7,7 +7,9 @@
  * - `enforce` — wraps the spawn with the real OS backend (macOS seatbelt /
  *   Linux bubblewrap) and fails closed when no backend is available.
  */
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BashSandboxPreflight } from "../tools/bash.ts";
 import type { SandboxBackendStatus, SandboxMode, SandboxPolicy } from "./policy.ts";
 
@@ -31,6 +33,18 @@ export function resolveBashSandboxMode(env?: Record<string, string | undefined>)
  * Workspace-write policy for the session bash runtime. Outbound network access
  * is disabled; writes are limited to the workspace and the OS temp directory.
  */
+const PROTECTED_WORKSPACE_CONTROL_PATHS = [
+	[".git", "hooks"],
+	[".git", "config"],
+	[".omk", "settings.json"],
+] as const;
+
+function protectedWorkspaceWritePaths(root: string): readonly string[] {
+	return PROTECTED_WORKSPACE_CONTROL_PATHS.map((segments) => join(root, ...segments)).filter((target) =>
+		existsSync(target),
+	);
+}
+
 export function createWorkspaceSandboxPolicy(root: string, mode: Exclude<SandboxMode, "off">): SandboxPolicy {
 	return {
 		mode,
@@ -40,7 +54,7 @@ export function createWorkspaceSandboxPolicy(root: string, mode: Exclude<Sandbox
 			readAllow: [root],
 			readDeny: [],
 			writeAllow: [root],
-			denyWrite: [],
+			denyWrite: protectedWorkspaceWritePaths(root),
 			tempWrite: [tmpdir()],
 			followSymlinks: false,
 		},

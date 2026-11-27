@@ -24,12 +24,24 @@
 <p align="center">
   <a href="#60-second-start">60-second start</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#omkcontrol">TUI workspace (v3.0.0)</a> ·
   <a href="#what-runs-by-default">Default or opt-in?</a> ·
   <a href="#context-cache-and-memory">Context &amp; memory</a> ·
   <a href="#evidence-and-limits">Evidence and limits</a><br />
   <a href="#faq">Choosing OMK</a> ·
   <a href="packages/coding-agent/docs/index.md">Documentation</a> ·
-  <a href="https://discord.gg/zgCX5uRy4">Discord</a>
+  <a href="https://discord.gg/zgCX5uRy4">Discord</a> ·
+  <a href="#sponsor">Sponsor</a>
+</p>
+
+<p align="center">
+  <img
+    src="readmeasset/omk-ide-tui.png"
+    alt="OMK v3.0.0 terminal IDE workspace with default-on left Files sidebar, Paper Academic status header, read-only /plan mode, and line-numbered code preview drawer"
+    width="100%"
+  />
+  <br />
+  <sub>Terminal IDE workspace in OMK v3.0.0: default-on repository file explorer, line-numbered preview drawer, mouse wheel transcript scrolling, and read-only <code>/plan</code> mode.</sub>
 </p>
 
 <!-- Community PR authors: non-owner, non-bot accounts with a pull request directly in dmae97/omk.
@@ -454,17 +466,18 @@ Method, per-difficulty results, audit and reproduction notes:
 
 ## OMK//CONTROL
 
-The terminal UI shows the selected model, tools, and session status. Additional
-signals depend on the integrations you configure.
+OMK 3.0.0 turns the interactive terminal into a multi-pane IDE workspace with Paper Academic hairline framing, a default-on left repository file explorer, mouse wheel transcript scrolling, and built-in planning and worktree commands.
 
-| In the terminal | What it shows |
-| --- | --- |
-| Model | Selected provider and model |
-| Tools | Available tools and their activity |
-| Session | Status and the current conversation |
+| TUI surface (v3.0.0) | What changed | Keys, commands & opt-outs |
+| --- | --- | --- |
+| **Left Files sidebar** | Default-on repository tree (`FilesSidebarComponent`) with recursive search across collapsed folders, live filter selection, and one-key `@path` insertion | `Ctrl+B` / `Alt+B` toggle, `Alt+E` focus, `/files <query>`, `Tab` / `Space` / `@` insert, `OMK_FILES_SIDEBAR=0` opt-out |
+| **Code preview drawer** | Scrollable line-numbered file preview (`FilePreviewDrawerComponent`) with `L`-range header; blocks escaping symlinks and secret files (`.env*`, `.npmrc`, `.netrc`, private keys, keystores) | `Enter` open preview, `↑`/`↓` or wheel scroll, `Enter`/`Space` insert path, `Esc` close |
+| **Chat wheel scrolling** | Scroll up and down through chat history without leaving the TUI; keeps left/right gutters and input box pinned, locks viewport during streaming with a live `below` counter, and shows a Paper Academic `HISTORY` hairline | Mouse wheel scroll, `Shift`/`Ctrl` + wheel half-page scroll, `[Latest ▾]` click or `Enter` submit to jump back to tail, `OMK_TUI_MOUSE=0` or `/files mouse off` to disable SGR mouse |
+| **Paper Academic chrome** | Hairline framing, 4-line `OMK · STATUS` header with `◧ Files ◂/▸` indicator, pinned right `OMK//CONTROL` rail (`Ctrl+Q`), readable working spinner, and `TUI.setLeftGutter()` in `omk-tui` | `Ctrl+O` details/control overlay, `Ctrl+Q` toggle rail, `/open <path>` local opener |
+| **Built-in TUI workflows** | First-class read-only planning with hardened shell guards, git worktree branching, metacognition status, and Herdr state reporting | `/plan`, `/branch`, `/metacog` |
 
 The header reads `omk v<package.version> · OMK//CONTROL`; the installed package
-version is the source of truth.
+version is the source of truth. Additional signals depend on the integrations you configure.
 
 ## Control loop
 
@@ -640,7 +653,7 @@ material that is not published with the repository.
 - [Containerization](packages/coding-agent/docs/containerization.md)
 - [Public skill catalog](SKILLS.md)
 - [Changelog](packages/coding-agent/CHANGELOG.md)
-- [Release notes for v2.0.4](.github/RELEASE_NOTES_v2.0.4.md)
+- [Release notes for v3.0.0](.github/RELEASE_NOTES_v3.0.0.md)
 - Latest public release: [GitHub Releases](https://github.com/dmae97/omk/releases/latest). The source-version notes linked above can describe a candidate until its tag workflow completes.
 
 ## Development
@@ -713,6 +726,26 @@ the chosen workflow. Its result covers the declared checks, not all behavior. Se
 
 <!-- releases:start -->
 
+## Release v3.0.0
+
+### Added
+
+- Default-on Paper Academic left repository file explorer (`FilesSidebarComponent`) with recursive search (`/files <query>`), live arrow/Tab filter navigation, one-key `@`/Space path insertion, scrollable line-numbered preview drawer (`FilePreviewDrawerComponent`), and SGR mouse click/wheel support (`Ctrl+B`/`Alt+B`, `Alt+E`, `OMK_FILES_SIDEBAR=0` opt-out, `OMK_TUI_MOUSE=0` or `/files mouse off` to disable mouse).
+- Chat transcript mouse wheel scrolling (`chat-wheel-scroll.ts`, `chat-scroll-model.ts`) with `Shift`/`Ctrl` half-page fast scroll, Paper Academic `HISTORY` hairline, live `[Latest ▾]` return-to-tail button, streaming scroll lock with live `below` counter, and automatic return to tail on `Enter` submit or session switch while keeping left/right gutters and input box pinned.
+- Paper Academic hairline chrome, 4-line `OMK · STATUS` header with sidebar toggle indicator, readable working spinner, `/open` local path opener, and built-in `<builtin:pstack-workflow>` (`/plan` read-only planning, `/branch` worktree management), `<builtin:metacog>`, and `<builtin:herdr-agent-state>` extensions.
+- Self-contained standalone single-file binary bootstrap (`embedded-bundle.ts`) that materializes embedded package metadata and built-in themes into an owner-only (`0700`) cache when launched without adjacent asset files.
+- Goal restart recovery (`goal-restart-recovery.ts`), final request budget enforcement (`final-request-budget.ts`), tool output compaction (`tool-output-compactor.ts`), dynamic reasoning budget (`dynamic-reasoning-budget.ts`), multi-session resource fleet ledger (`omk doctor resources --fleet`), verified memory pruning (`verified-memory-prune.ts`), unified multi-agent dispatch (`unified-multiagent-dispatch.ts`), typed Rust core runtime bridge (`rust-core-runtime-bridge.ts`), and SHA-256 release artifact verification gate (`release-artifact-gate.mjs`).
+
+### Fixed
+
+- Hardened `/plan` read-only command guards to reject `env`/`command` execution wrappers, embedded newlines, background `&`, process substitution (`<(`/ `>(`), `sort -o`/`--output`, and `git --output`/`--ext-diff`/`--textconv`.
+- Hardened sandbox and workspace write boundaries against symlink secret escapes and `.git/hooks` writes, filtered symlinks pointing outside the repository root out of `listRepoDirectory()` results, and expanded secret preview blocking to cover `.npmrc`, `.netrc`, `.pypirc`, `secrets.*`, `id_ecdsa`, `id_dsa`, `*.jks`, and `*.keystore`.
+- Fixed `ModelRegistry.refreshIfChanged()` missing same-size edits made within the same coarse filesystem clock tick.
+- Fixed next-task Tab suggestions dropping fresh suggestions after all todos complete, misclassifying proxy effort variants or zero-price subscription endpoints with `cacheRead > 0`, and falling back cleanly when quota refresh is still pending.
+- Added long-session virtualization and bounded caches, deferred browser imports, and improved WSL path/clipboard image handling.
+
+Release notes live in [RELEASE_NOTES_v3.0.0.md](.github/RELEASE_NOTES_v3.0.0.md).
+
 ## Release v2.0.4
 
 ### Fixed
@@ -751,18 +784,6 @@ Release notes live in [RELEASE_NOTES_v2.0.4.md](.github/RELEASE_NOTES_v2.0.4.md)
 
 Release notes live in [RELEASE_NOTES_v2.0.3.md](.github/RELEASE_NOTES_v2.0.3.md).
 
-## Release v2.0.2
-
-### Added
-
-- `OMK_SUBAGENT_ADAPTORCH` (experimental, default off) lets subagent lane dispatch use the result of an actually executed, authorized `adaptorch_route_topology` MCP call. `shadow` (or `1`) only records proposals; `enforce` can prioritize ready lanes and narrow sequential execution to one lane. A receipt must match the same prompt's task IDs, descriptions and dependencies and still be fresh; missing or incompatible results fall back to the local plan. The consumer adds no service or model calls. See [AdaptOrch subagent routing](packages/coding-agent/docs/adaptorch-subagent-routing.md).
-
-### Fixed
-
-- The standalone installer reads the downloaded binary's version with `OMK_PACKAGE_DIR` unset, so an `OMK_PACKAGE_DIR` in the environment that points at another installation no longer makes the check read that installation's version.
-
-Release notes live in [RELEASE_NOTES_v2.0.2.md](.github/RELEASE_NOTES_v2.0.2.md).
-
 <!-- releases:end -->
 
 </details>
@@ -775,7 +796,9 @@ report security issues as described in [SECURITY.md](SECURITY.md).
 
 ## Sponsor
 
-[AdaptOrch.com](https://adaptorch.com/) sponsors OMK.
+<a href="https://adaptorch.com/"><img alt="Sponsored by adaptorch.com" src="https://img.shields.io/badge/Sponsor-adaptorch.com-111111?style=flat-square" /></a>
+
+[adaptorch.com](https://adaptorch.com/) sponsors OMK.
 Explore its [plans](https://adaptorch.com/#pricing) to support OMK's sponsor.
 OMK remains [MIT-licensed](LICENSE); an AdaptOrch subscription is not required to use it.
 

@@ -170,6 +170,18 @@ describe("plan state machine and extraction", () => {
 		expect(isReadOnlyPlanCommand("jq '.name' package.json")).toBe(true);
 		expect(isReadOnlyPlanCommand("gh pr view 123")).toBe(true);
 		expect(isReadOnlyPlanCommand("git -C /repo status")).toBe(true);
+
+		// Security regressions: block command wrappers, newlines, background '&', process substitution, and output flags
+		expect(isReadOnlyPlanCommand("env rm -rf /tmp/x")).toBe(false);
+		expect(isReadOnlyPlanCommand("command rm -rf /tmp/x")).toBe(false);
+		expect(isReadOnlyPlanCommand("ls\nrm -rf /tmp/x")).toBe(false);
+		expect(isReadOnlyPlanCommand("ls & rm -rf /tmp/x")).toBe(false);
+		expect(isReadOnlyPlanCommand("cat <(rm -rf /tmp/x)")).toBe(false);
+		expect(isReadOnlyPlanCommand("sort -o /tmp/out package.json")).toBe(false);
+		expect(isReadOnlyPlanCommand("sort --output=/tmp/out package.json")).toBe(false);
+		expect(isReadOnlyPlanCommand("git diff --output=/tmp/patch")).toBe(false);
+		expect(isReadOnlyPlanCommand("env")).toBe(true);
+		expect(isReadOnlyPlanCommand("command -v git")).toBe(true);
 	});
 
 	it("parses heading-style plans with blank lines, sub-bullets, and /plan done args", () => {

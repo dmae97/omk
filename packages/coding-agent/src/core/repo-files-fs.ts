@@ -15,7 +15,7 @@ const DEFAULT_IGNORE_NAMES = new Set([
 ]);
 
 const SECRET_FILE_RE =
-	/^(?:\.env(?:\..+)?|credentials\.json|auth\.json|id_rsa(?:\.pub)?|id_ed25519(?:\.pub)?|.*\.pem|.*\.key|.*\.p12|.*\.pfx|.*\.kdbx|key4\.db|logins\.json|cookies\.sqlite)$/i;
+	/^(?:\.env(?:\..+)?|\.npmrc|\.netrc|\.pypirc|credentials\.json|auth\.json|secrets\.(?:json|ya?ml|toml)|id_rsa(?:\.pub)?|id_ed25519(?:\.pub)?|id_ecdsa(?:\.pub)?|id_dsa(?:\.pub)?|.*\.pem|.*\.key|.*\.p12|.*\.pfx|.*\.jks|.*\.keystore|.*\.kdbx|key4\.db|logins\.json|cookies\.sqlite)$/i;
 
 export type RepoFileKind = "dir" | "file";
 
@@ -103,6 +103,10 @@ export function listRepoDirectory(
 		let kind: RepoFileKind = dirent.isDirectory() ? "dir" : "file";
 		let size = 0;
 		try {
+			if (dirent.isSymbolicLink()) {
+				const resolved = realpathSync(full);
+				if (resolved !== rootReal && !resolved.startsWith(`${rootReal}${sep}`)) continue;
+			}
 			const st = statSync(full);
 			kind = st.isDirectory() ? "dir" : "file";
 			size = st.isFile() ? st.size : 0;
@@ -193,7 +197,7 @@ export function readSafeRepoFile(rootDir: string, relPath: string, maxBytes = 65
 	const st = statSync(targetFile);
 	if (!st.isFile()) throw new Error("Target is not a regular file");
 
-	if (isSecretFileName(targetFile)) {
+	if (isSecretFileName(relPath) || isSecretFileName(targetFile)) {
 		return { path: rel, size: st.size, binary: false, blocked: true, truncated: false, content: "" };
 	}
 

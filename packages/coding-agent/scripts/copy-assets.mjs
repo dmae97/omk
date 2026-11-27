@@ -4,7 +4,7 @@
  * The lockfile security gate forbids those packages, and a missing `shx` on
  * PATH made `npm run build` exit 127 after TypeScript had already succeeded.
  */
-import { chmodSync, copyFileSync, cpSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -62,6 +62,22 @@ export function copyAssets(packageDir, binary = false) {
 		copyFile(join(html, name), join(dist, "core/export-html", name));
 	}
 	copyMatching(join(html, "vendor"), join(dist, "core/export-html/vendor"), ".js");
+	const embeddedAssetsPath = join(dist, "bun/embedded-assets.js");
+	if (existsSync(embeddedAssetsPath)) {
+		const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+		const themeDir = join(packageDir, "src/modes/interactive/theme");
+		const themes = Object.fromEntries(
+			readdirSync(themeDir)
+				.filter((name) => name.endsWith(".json") && name !== "theme-schema.json")
+				.sort()
+				.map((name) => [name, JSON.parse(readFileSync(join(themeDir, name), "utf8"))]),
+		);
+		writeFileSync(
+			embeddedAssetsPath,
+			`export const EMBEDDED_VERSION = ${JSON.stringify(pkg.version ?? "0.0.0")};\nexport const EMBEDDED_THEMES = ${JSON.stringify(themes)};\n`,
+			"utf8",
+		);
+	}
 }
 
 export function makeCliExecutable(packageDir) {

@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-import { APP_NAME, VERSION } from "../config.ts";
-import { OPENTUI_STATUS_WORKER_ARG } from "../modes/interactive/opentui-status-worker-protocol.ts";
-
-process.title = APP_NAME;
-process.emitWarning = (() => {}) as typeof process.emitWarning;
-
+import { ensureStandaloneSingleFileAssets } from "./embedded-bundle.ts";
 import { restoreSandboxEnv } from "./restore-sandbox-env.ts";
 
 restoreSandboxEnv();
+ensureStandaloneSingleFileAssets();
+
+const { APP_NAME, VERSION } = await import("../config.ts");
+const { OPENTUI_STATUS_WORKER_ARG } = await import("../modes/interactive/opentui-status-worker-protocol.ts");
+
+process.title = APP_NAME;
+process.emitWarning = (() => {}) as typeof process.emitWarning;
 
 // Same fast path as ../cli.ts: `omk --version` answers before the bundled runtime registers.
 const args = process.argv.slice(2);

@@ -1,6 +1,22 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] - 2026-11-27
+
+### Added
+
+- Default-on Paper Academic left repository file explorer (`FilesSidebarComponent`) with recursive search (`/files <query>`), live arrow/Tab filter navigation, one-key `@`/Space path insertion, scrollable line-numbered preview drawer (`FilePreviewDrawerComponent`), and SGR mouse click/wheel support (`Ctrl+B`/`Alt+B`, `Alt+E`, `OMK_FILES_SIDEBAR=0` opt-out, `OMK_TUI_MOUSE=0` or `/files mouse off` to disable mouse).
+- Chat transcript mouse wheel scrolling (`chat-wheel-scroll.ts`, `chat-scroll-model.ts`) with `Shift`/`Ctrl` half-page fast scroll, Paper Academic `HISTORY` hairline, live `[Latest ▾]` return-to-tail button, streaming scroll lock with live `below` counter, and automatic return to tail on `Enter` submit or session switch while keeping left/right gutters and input box pinned.
+- Paper Academic hairline chrome, 4-line `OMK · STATUS` header with sidebar toggle indicator, readable working spinner, `/open` local path opener, and built-in `<builtin:pstack-workflow>` (`/plan` read-only planning, `/branch` worktree management), `<builtin:metacog>`, and `<builtin:herdr-agent-state>` extensions.
+- Self-contained standalone single-file binary bootstrap (`embedded-bundle.ts`) that materializes embedded package metadata and built-in themes into an owner-only (`0700`) cache when launched without adjacent asset files.
+- Goal restart recovery (`goal-restart-recovery.ts`), final request budget enforcement (`final-request-budget.ts`), tool output compaction (`tool-output-compactor.ts`), dynamic reasoning budget (`dynamic-reasoning-budget.ts`), multi-session resource fleet ledger (`omk doctor resources --fleet`), verified memory pruning (`verified-memory-prune.ts`), unified multi-agent dispatch (`unified-multiagent-dispatch.ts`), typed Rust core runtime bridge (`rust-core-runtime-bridge.ts`), and SHA-256 release artifact verification gate (`release-artifact-gate.mjs`).
+
+### Fixed
+
+- Hardened `/plan` read-only command guards to reject `env`/`command` execution wrappers, embedded newlines, background `&`, process substitution (`<(`/ `>(`), `sort -o`/`--output`, and `git --output`/`--ext-diff`/`--textconv`.
+- Hardened sandbox and workspace write boundaries against symlink secret escapes and `.git/hooks` writes, filtered symlinks pointing outside the repository root out of `listRepoDirectory()` results, and expanded secret preview blocking to cover `.npmrc`, `.netrc`, `.pypirc`, `secrets.*`, `id_ecdsa`, `id_dsa`, `*.jks`, and `*.keystore`.
+- Fixed `ModelRegistry.refreshIfChanged()` missing same-size edits made within the same coarse filesystem clock tick.
+- Fixed next-task Tab suggestions dropping fresh suggestions after all todos complete, misclassifying proxy effort variants or zero-price subscription endpoints with `cacheRead > 0`, and falling back cleanly when quota refresh is still pending.
+- Added long-session virtualization and bounded caches, deferred browser imports, and improved WSL path/clipboard image handling.
 
 ## [2.0.4] - 2026-11-23
 

@@ -11,10 +11,16 @@ import {
 	computeDurableGoalGeneration,
 	DurableGoalError,
 	type DurableGoalSnapshot,
-	freshDurableGoalEvidence,
 	nextDurableGoalTimestamp,
 } from "./durable-goal.ts";
 import type { DurableGoalStore } from "./durable-goal-store.ts";
+import {
+	computeAcceptanceGap,
+	formatGoalRecoveryFailure,
+	type GoalRestartRecoveryVerdict,
+	hasPersistedVerificationReceipts,
+	preflightGoalAcceptance,
+} from "./goal-restart-recovery.ts";
 import {
 	captureGoalWorkspace,
 	type GoalAcceptanceResult,
@@ -197,57 +203,60 @@ export class GoalAcceptance {
 	 */
 	acceptanceGap(goal: DurableGoalSnapshot, cwd: string): string | undefined {
 		const key = goalKeyOf(goal);
-		const contract = this.contracts.get(key);
-		if (contract?.command === undefined) return "the approved acceptance check was withdrawn";
-		if (contract.latestPassed === false) return "the latest acceptance check failed";
-		// Receipts of an earlier contract stay attached but no longer vouch for this one.
-		const candidates = freshDurableGoalEvidence(goal)
-			.flatMap((evidence) => {
-				const trusted = this.trusted.get(evidence.id);
-				return trusted?.goalKey === key &&
-					trusted.checkId === key &&
-					trusted.contractRevision === contract.revision &&
-					trusted.contractDigest === contract.digest &&
-					trusted.digest === evidence.digest
-					? [{ evidence, trusted }]
-					: [];
-			})
-			.reverse();
-		if (candidates.length === 0) return "no passing acceptance receipt in this goal generation";
-		const current = captureGoalWorkspace(cwd);
-		if (current.completeness !== "complete") return `workspace scope is incomplete (${current.completeness})`;
 		const verifier = this.verifierFor(cwd, key);
-		for (const { evidence, trusted } of candidates) {
-			if (
-				trusted.workspace.completeness === "complete" &&
-				trusted.workspace.sha256 === current.sha256 &&
-				verifier.receiptMatches(evidence.id, evidence.digest)
-			) {
-				return undefined;
-			}
-		}
-		if (candidates.some(({ trusted }) => trusted.workspace.completeness !== "complete")) {
-			return "workspace scope is incomplete in the acceptance receipt";
-		}
-		return "the workspace changed after the acceptance check passed";
+		return computeAcceptanceGap({
+			goal,
+			key,
+			contract: this.contracts.get(key),
+			trusted: this.trusted,
+			currentWorkspace: captureGoalWorkspace(cwd),
+			receiptMatches: (id, digest) => verifier.receiptMatches(id, digest),
+		});
 	}
 
 	/** Complete `goal`. With an approved check, only on a matching trusted receipt; otherwise the reducer's rule. */
 	async complete(store: DurableGoalStore, goal: DurableGoalSnapshot, cwd: string): Promise<DurableGoalSnapshot> {
 		const gap = this.capabilityGaps.get(goalKeyOf(goal));
 		if (gap) throw new DurableGoalError("evidence-required", `required tools unavailable: ${gap.missing.join(", ")}`);
-		if (this.gated(goal)) {
+		if (this.gated(goal, cwd)) {
 			const gap = this.acceptanceGap(goal, cwd);
 			if (gap !== undefined) throw new DurableGoalError("evidence-required", `${gap}; run /goal verify`);
 		}
 		return store.transition({ kind: "complete", ref: goal.ref }, nextDurableGoalTimestamp(goal));
 	}
 
-	/** An approved check gates completion, and so does a withdrawn one once a check of the goal has passed. */
-	private gated(goal: DurableGoalSnapshot): boolean {
+	/** Preflight verification completion integrity across restarts, generation edits, and workspace drift. */
+	preflightRestartRecovery(goal: DurableGoalSnapshot, cwd: string): GoalRestartRecoveryVerdict {
+		const key = goalKeyOf(goal);
+		const verifier = this.verifierFor(cwd, key);
+		return preflightGoalAcceptance({
+			goal,
+			key,
+			contract: this.contracts.get(key),
+			trusted: this.trusted,
+			currentWorkspace: captureGoalWorkspace(cwd),
+			receiptMatches: (id, digest) => verifier.receiptMatches(id, digest),
+		});
+	}
+
+	/** Fail-closed restart-safe completion requiring active session approval and matching workspace digest. */
+	async completeVerified(
+		store: DurableGoalStore,
+		goal: DurableGoalSnapshot,
+		cwd: string,
+	): Promise<DurableGoalSnapshot> {
+		const verdict = this.preflightRestartRecovery(goal, cwd);
+		if (verdict.status !== "ready_to_complete") {
+			throw new DurableGoalError("evidence-required", formatGoalRecoveryFailure(verdict));
+		}
+		return this.complete(store, goal, cwd);
+	}
+
+	/** An approved check, prior trusted receipt, or persisted receipt on disk gates completion across restarts. */
+	private gated(goal: DurableGoalSnapshot, cwd: string): boolean {
 		const key = goalKeyOf(goal);
 		const contract = this.contracts.get(key);
-		if (contract === undefined) return false;
+		if (contract === undefined) return hasPersistedVerificationReceipts(cwd, key);
 		if (contract.command !== undefined) return true;
 		for (const receipt of this.trusted.values()) if (receipt.goalKey === key) return true;
 		return false;

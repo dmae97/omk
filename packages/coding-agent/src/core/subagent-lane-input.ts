@@ -3,6 +3,9 @@ import type { LaneOutcome, SubagentLaneExecutionResult } from "./subagent-lane-c
 import type { SubagentOrchestrationPlan } from "./subagent-orchestration.ts";
 import type { WorkloadPermitPool } from "./workload-permit-pool.ts";
 
+export * from "./live-child-resource-guard.ts";
+export * from "./unified-multiagent-dispatch.ts";
+
 /**
  * Lane launch input contract.
  *

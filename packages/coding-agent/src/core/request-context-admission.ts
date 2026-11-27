@@ -11,6 +11,12 @@ import {
 import { projectRequestForAdmission } from "./request-admission-projection.ts";
 import { countTextParts } from "./text-token-estimate.ts";
 
+export {
+	evaluateFinalRequestBudget,
+	type FinalRequestBudgetDecision,
+	type FinalRequestBudgetInput,
+} from "./final-request-budget.ts";
+
 export interface RequestAdmissionSnapshot {
 	readonly inspected: number;
 	readonly admitted: number;

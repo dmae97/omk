@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] - 2026-11-26
+
+- Version alignment only.
 
 ## [2.0.4] - 2026-11-23
 

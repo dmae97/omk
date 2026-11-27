@@ -1,6 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] - 2026-11-26
+
+### Added
+
+- Support `TUI.setLeftGutter()` persistent left sidebar gutter layout and multi-target `hideOverlaysExcept()`.
+
+### Fixed
+
+- Restore OSC 8 hyperlinks in detached tmux sessions and directory links.
 
 ## [2.0.4] - 2026-11-23
 

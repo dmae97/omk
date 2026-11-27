@@ -18,6 +18,7 @@ import {
 import { join } from "node:path";
 import { fsyncDirectorySync } from "./durable-file-directory.ts";
 import { acquireDurableFileMutationLockSync } from "./durable-file-identity.ts";
+import { type MemoryPruneResult, pruneVerifiedMemoryDirectory } from "./verified-memory-prune.ts";
 import {
 	type MemoryAdmission,
 	parseMemoryRecord,
@@ -152,6 +153,7 @@ export class VerifiedMemoryStore {
 		if (!directory) throw new Error("memory storage unavailable");
 		const lock = acquireDurableFileMutationLockSync(join(directory, "store"));
 		try {
+			if (this.records(directory).length >= MAX_MEMORY_RECORDS) this.pruneDirectory(directory, Date.now());
 			if (this.records(directory).length >= MAX_MEMORY_RECORDS)
 				return { verdict: "abstain", reason: "record-limit" };
 			publish(directory, `${record.id}.json`, record);
@@ -173,6 +175,28 @@ export class VerifiedMemoryStore {
 		} finally {
 			lock.release();
 		}
+	}
+
+	prune(nowMs = Date.now()): MemoryPruneResult {
+		const directory = this.directory(false);
+		if (!directory) return { removedExpired: 0, removedRevoked: 0, removedStale: 0, kept: 0 };
+		const lock = acquireDurableFileMutationLockSync(join(directory, "store"));
+		try {
+			return this.pruneDirectory(directory, nowMs);
+		} finally {
+			lock.release();
+		}
+	}
+
+	private pruneDirectory(directory: string, nowMs: number): MemoryPruneResult {
+		return pruneVerifiedMemoryDirectory({
+			workspaceRoot: this.workspace.root,
+			directory,
+			filenames: this.records(directory),
+			nowMs,
+			hasTombstone,
+			readPrivateRecord,
+		});
 	}
 
 	private records(directory: string): string[] {

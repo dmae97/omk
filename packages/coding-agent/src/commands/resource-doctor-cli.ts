@@ -1,4 +1,11 @@
+import { join } from "node:path";
+import { getAgentDir } from "../config.ts";
 import { captureHostResourceSnapshot, type HostResourceSnapshot } from "../core/host-resource-snapshot.ts";
+import {
+	computeUnifiedSessionQuota,
+	type FleetResourceSummary,
+	MultiSessionResourceLedger,
+} from "../core/multi-session-resource-ledger.ts";
 import { decideResourceAdmission } from "../core/resource-admission.ts";
 import {
 	buildResourceDoctorReport,
@@ -15,6 +22,7 @@ import {
 import { SettingsManager } from "../core/settings-manager.ts";
 
 export { collectResourceObservationReport, RESOURCE_REPORT_MIN_ADMISSIONS, type ResourceObservationReport };
+export { computeUnifiedSessionQuota, type FleetResourceSummary, MultiSessionResourceLedger };
 
 /**
  * Headless resource diagnostic (OMK v0.97.x roadmap §19.2, M1/PR2):
@@ -28,7 +36,7 @@ export { collectResourceObservationReport, RESOURCE_REPORT_MIN_ADMISSIONS, type 
  * when the governor mode is `off` because it only runs on explicit request.
  */
 
-const USAGE = "Usage: omk doctor resources [--json] [--report]";
+const USAGE = "Usage: omk doctor resources [--json] [--report] [--fleet]";
 
 export interface ResourceDoctorCliOverrides {
 	readonly cwd?: string;
@@ -72,6 +80,18 @@ export async function runResourceDoctorCli(
 		else renderObservationReport(report, writeLine);
 		return { handled: true, exitCode: 0 };
 	}
+	if (flags.fleet) {
+		const fleetDir = join(getAgentDir(), "run", "session-leases");
+		const summary = new MultiSessionResourceLedger(fleetDir).snapshot();
+		if (json) writeLine(JSON.stringify(summary, null, 2));
+		else {
+			writeLine(`Fleet resource summary (${summary.activeSessions} active, ${summary.prunedStaleSessions} pruned)`);
+			writeLine(`total RSS: ${Math.round(summary.totalRssBytes / (1024 * 1024))} MiB`);
+			writeLine(`total CPU slots: ${summary.totalCpuSlots}`);
+			writeLine(`total tokens: ${summary.totalTokensUsed}`);
+		}
+		return { handled: true, exitCode: 0 };
+	}
 
 	const settings = (overrides.loadSettings ?? (() => loadSettingsFromDisk(overrides.cwd)))();
 	const resolved = resolveResourceGovernorSettings(settings.resourceGovernor, overrides.env ?? process.env);
@@ -104,9 +124,10 @@ export async function runResourceDoctorCli(
 function parseDoctorFlags(
 	args: readonly string[],
 	writeLine: (line: string) => void,
-): { readonly json: boolean; readonly report: boolean; readonly exit: number | null } {
+): { readonly json: boolean; readonly report: boolean; readonly fleet: boolean; readonly exit: number | null } {
 	let json = false;
 	let report = false;
+	let fleet = false;
 	for (const arg of args) {
 		if (arg === "--json") {
 			json = true;
@@ -116,15 +137,19 @@ function parseDoctorFlags(
 			report = true;
 			continue;
 		}
+		if (arg === "--fleet") {
+			fleet = true;
+			continue;
+		}
 		if (arg === "--help" || arg === "-h") {
 			writeLine(USAGE);
-			return { json, report, exit: 0 };
+			return { json, report, fleet, exit: 0 };
 		}
 		writeLine(`Unknown argument: ${arg}`);
 		writeLine(USAGE);
-		return { json, report, exit: 2 };
+		return { json, report, fleet, exit: 2 };
 	}
-	return { json, report, exit: null };
+	return { json, report, fleet, exit: null };
 }
 
 function renderObservationReport(report: ResourceObservationReport, writeLine: (line: string) => void): void {
