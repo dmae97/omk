@@ -15,3 +15,22 @@ export function findChangedLines(previous: readonly string[], next: readonly str
 	}
 	return { firstChanged, lastChanged };
 }
+
+export type ViewportDecorator = (viewportLines: readonly string[], width: number, height: number) => string[];
+
+export function applyViewportDecorator(
+	lines: string[],
+	width: number,
+	height: number,
+	hook?: { raw: string[]; decorate?: ViewportDecorator },
+): string[] {
+	const vpStart = Math.max(0, lines.length - height);
+	const rawViewport = lines.slice(vpStart, vpStart + height);
+	if (hook) hook.raw = rawViewport;
+	if (!hook?.decorate) return lines;
+	const decorated = hook.decorate(rawViewport, width, height);
+	if (decorated === rawViewport) return lines;
+	const next = [...lines];
+	for (let i = 0; i < decorated.length && vpStart + i < next.length; i++) next[vpStart + i] = decorated[i]!;
+	return next;
+}

@@ -29,6 +29,14 @@ export function isSgrLeftPress(event: SgrMouseEvent): boolean {
 	return !event.release && (event.button & 64) === 0 && (event.button & 32) === 0 && (event.button & 0b11) === 0;
 }
 
+export function isSgrLeftDrag(event: SgrMouseEvent): boolean {
+	return !event.release && (event.button & 64) === 0 && (event.button & 32) !== 0 && (event.button & 0b11) === 0;
+}
+
+export function isSgrLeftRelease(event: SgrMouseEvent): boolean {
+	return event.release && (event.button & 64) === 0 && (event.button & 0b11) === 0;
+}
+
 export function isSgrWheelUp(event: SgrMouseEvent): boolean {
 	return !event.release && (event.button & 64) !== 0 && (event.button & 0b11) === 0;
 }
@@ -41,8 +49,8 @@ export function hasSgrFastScrollModifier(event: SgrMouseEvent): boolean {
 	return (event.button & (4 | 16)) !== 0;
 }
 
-const SGR_MOUSE_ON = "\x1b[?1000h\x1b[?1006h";
-const SGR_MOUSE_OFF = "\x1b[?1000l\x1b[?1006l";
+const SGR_MOUSE_ON = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+const SGR_MOUSE_OFF = "\x1b[?1002l\x1b[?1000l\x1b[?1006l";
 
 let mouseHooksRegistered = false;
 let mouseWanted = false;
@@ -173,7 +181,6 @@ export function handleFilesSidebarMouse(event: SgrMouseEvent, ctx: FilesSidebarM
 		const drawerHeight = Math.max(6, Math.min(16, Math.floor(termHeight * 0.42)));
 		const drawerTop = termHeight - drawerHeight + 1;
 		if (event.col > gutter + 1 && event.row >= drawerTop) {
-			if (event.release) return true;
 			if (isWheelUp) {
 				model.scrollPreview(-3);
 				ctx.onRequestRender();
@@ -195,7 +202,8 @@ export function handleFilesSidebarMouse(event: SgrMouseEvent, ctx: FilesSidebarM
 				}
 				return true;
 			}
-			return true;
+			// Allow press/drag/release inside preview body (row > drawerTop) to fall through to text drag selection.
+			return event.row === drawerTop;
 		}
 	}
 

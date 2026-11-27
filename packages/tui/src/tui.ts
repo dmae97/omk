@@ -13,7 +13,7 @@ import type { Terminal } from "./terminal.ts";
 import { finishTerminalFrame } from "./terminal-final-frame.ts";
 import { deleteKittyImage, getCapabilities, isImageLine, setCellDimensions } from "./terminal-image.ts";
 import { isTermuxSession, REPAINT_BUDGET_SCREENS, ResizeResync } from "./terminal-resync.ts";
-import { findChangedLines } from "./tui-line-diff.ts";
+import { applyViewportDecorator, findChangedLines, type ViewportDecorator } from "./tui-line-diff.ts";
 import { extractSegments, sliceByColumn, sliceWithWidth, visibleWidth } from "./utils.ts";
 
 /**
@@ -278,6 +278,7 @@ export class Container implements Component {
 export class TUI extends Container {
 	public terminal: Terminal;
 	private previousLines: string[] = [];
+	private readonly viewportHook: { raw: string[]; decorate?: ViewportDecorator } = { raw: [] };
 	private previousKittyImageIds = new Set<number>();
 	private readonly lineResets = new LineResetMemo();
 	private previousWidth = 0;
@@ -326,6 +327,10 @@ export class TUI extends Container {
 	get viewportTop(): number {
 		return this.previousViewportTop;
 	}
+	getViewportLines = (): readonly string[] => this.viewportHook.raw;
+	setViewportDecorator = (fn?: ViewportDecorator): void => {
+		this.viewportHook.decorate = fn;
+	};
 
 	getShowHardwareCursor(): boolean {
 		return this.showHardwareCursor;
@@ -1219,6 +1224,12 @@ export class TUI extends Container {
 
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);
+		newLines = applyViewportDecorator(
+			newLines,
+			width,
+			height,
+			finalLines === undefined ? this.viewportHook : undefined,
+		);
 
 		newLines = this.lineResets.apply(newLines);
 

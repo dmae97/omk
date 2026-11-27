@@ -176,7 +176,7 @@ export function setupChatWheelScroll(options: ChatWheelScrollOptions): ChatWheel
 				if (!(isFocusable(editor) ? editor.focused : true) && !isSidebarFocused()) {
 					if (isSgrWheelUp(mouse)) return { data: "\x1b[A" };
 					if (isSgrWheelDown(mouse)) return { data: "\x1b[B" };
-					return { consume: true };
+					return undefined;
 				}
 				if (isSgrWheelUp(mouse) || isSgrWheelDown(mouse)) {
 					const layout = readLayout(ui.contentWidth, ui.terminal.rows);
@@ -204,7 +204,7 @@ export function setupChatWheelScroll(options: ChatWheelScrollOptions): ChatWheel
 						return { consume: true };
 					}
 				}
-				return { consume: true };
+				return undefined;
 			});
 		},
 		reset() {
