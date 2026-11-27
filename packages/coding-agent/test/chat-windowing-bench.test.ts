@@ -86,6 +86,7 @@ function reply(i: number): string {
 		"",
 		"- first, measure the hot path",
 		"- then, keep the prefix",
+		"",
 		"```ts",
 		`export function f${i}(x: number): number {`,
 		"\treturn x * 2;",
@@ -126,12 +127,7 @@ function addTurn(
 		content: [
 			{
 				type: "text",
-				text: [
-					`$ rg cache src/module-${i}.ts`,
-					...Array.from({ length: 12 }, (_, line) =>
-						`src/module-${i}.ts:${line * 7 + 3}: cache rebuilt`,
-					),
-				].join("\n"),
+				text: Array.from({ length: 12 }, (_, l) => `src/module-${i}.ts:${l}: cache`).join("\n"),
 			},
 		],
 		isError: false,
@@ -155,6 +151,7 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 			addTurn(probe, probeTools, tui, turns);
 			turns += 1;
 		}
+		probe.addChild(new AssistantMessageComponent(undefined));
 		const transcriptLines = probe.render(118).length;
 
 		// Timed build: construct the identical transcript without rendering
@@ -167,6 +164,8 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 		const tools: ToolExecutionComponent[] = [];
 		const buildStart = performance.now();
 		for (let i = 0; i < turns; i++) addTurn(chat, tools, tui, i);
+		const tail = new AssistantMessageComponent(undefined);
+		chat.addChild(tail);
 		const buildMs = performance.now() - buildStart;
 
 		// Seed the prefix like the app does: InteractiveMode applies the
@@ -183,66 +182,46 @@ describe.skipIf(!enabled)("chat windowing bench", () => {
 		const firstStart = performance.now();
 		doRender();
 		const firstFrame = performance.now() - firstStart;
+		const heapAfterFirst = process.memoryUsage().heapUsed;
+		const firstFrameBytes = terminal.bytes;
 		const lines = chat.render(118).length;
-		const heapAfterFirstMB = process.memoryUsage().heapUsed / 1024 / 1024;
-
-		const tail = new AssistantMessageComponent(assistant(""));
-		chat.addChild(tail);
-		const keyToScreen: number[] = [];
-		const streamFrames: number[] = [];
-		tail.startStreaming();
-		const startBytes = terminal.bytes;
-		for (let frame = 0; frame < frames; frame++) {
-			tail.appendText(`token${frame} `);
-			const start = performance.now();
-			if (frame === Math.floor(frames / 2)) {
-				tui.handleInput("x");
+		const input = (tui as unknown as { handleInput(data: string): void }).handleInput.bind(tui);
+		const run = (mutate: (f: number) => void) => {
+			for (let f = 0; f < 5; f++) {
+				mutate(f + 10_000);
 				doRender();
-				keyToScreen.push(performance.now() - start);
-			} else {
-				doRender();
-				streamFrames.push(performance.now() - start);
 			}
-		}
-		const early = tools[Math.floor(tools.length / 2)];
-		const earlyStart = performance.now();
-		early?.toggleExpanded();
-		doRender();
-		const earlyToggleFrame = performance.now() - earlyStart;
-		console.log(
-			JSON.stringify({
-				transcriptLines,
-				turns,
-				lines,
-				firstFrameMs: +firstFrame.toFixed(1),
-				buildMs: +buildMs.toFixed(1),
-				seedScreens: seedOverride === undefined ? DEFAULT_SEED_SCREENS : undefined,
-				seedLines: seedOverride,
-				firstFrameBytes: terminal.bytes - startBytes,
-				heapAfterFirstMB: +heapAfterFirstMB.toFixed(1),
-				keyToScreenMs: stats(keyToScreen),
-				streamFrameMs: stats(streamFrames),
-				earlyToggleFrameMs: +earlyToggleFrame.toFixed(1),
-				streamFrameBytes: terminal.bytes - startBytes,
-				heapUsedMB: +(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1),
-				heapTotalMB: +(process.memoryUsage().heapTotal / 1024 / 1024).toFixed(1),
-				pidRssMB: +(process.memoryUsage().rss / 1024 / 1024).toFixed(1),
-				runtimeMs: process.env.TUI_BENCH_RUNTIME_S
-					? +process.env.TUI_BENCH_RUNTIME_S
-					: undefined,
-				ttfbMs: process.env.TUI_BENCH_TTFB
-					? +process.env.TUI_BENCH_TTFB
-					: undefined,
+			const times: number[] = [];
+			for (let f = 0; f < frames; f++) {
+				const t0 = performance.now();
+				mutate(f);
+				doRender();
+				times.push(performance.now() - t0);
+			}
+			return stats(times);
+		};
+		let streamed = "";
+		const result = {
+			impl: "getFrozenChildCount" in chat ? "windowed" : "full",
+			lines,
+			transcriptLines,
+			turns,
+			firstFrameBytes,
+			children: chat.children.length,
+			firstFrameMs: +firstFrame.toFixed(1),
+			buildMs: +buildMs.toFixed(1),
+			seedScreens: seedOverride === undefined ? DEFAULT_SEED_SCREENS : undefined,
+			seedLines: seedOverride,
+			heapAfterFirstMB: +(heapAfterFirst / 1048576).toFixed(1),
+			keypress: run((f) => input(f % 10 === 9 ? "\x7f" : "x")),
+			stream: run((f) => {
+				streamed += `word${f} `;
+				tail.updateContent(assistant(streamed));
 			}),
-		);
-		expect(lines).toBeLessThanOrEqual(transcriptLines);
-		expect(firstFrame).toBeLessThanOrEqual(
-			process.env.TUI_BENCH_RUNTIME_S
-				? +process.env.TUI_BENCH_RUNTIME_S
-				: firstFrame,
-		);
-		expect(process.env.TUI_BENCH_TTFB ? +process.env.TUI_BENCH_TTFB : 0).toBeLessThanOrEqual(
-			process.env.TUI_BENCH_RUNTIME_S ? +process.env.TUI_BENCH_RUNTIME_S : 0,
-		);
+			early: run((f) => tools[3].setExpanded(f % 2 === 0)),
+		};
+		console.log(`BENCH ${JSON.stringify(result)}`);
+		expect(result.transcriptLines).toBeGreaterThanOrEqual(targetLines);
+		expect(result.lines).toBeLessThanOrEqual(result.transcriptLines);
 	});
 });
