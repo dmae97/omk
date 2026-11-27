@@ -1203,10 +1203,11 @@
 				"inspected": 2,
 				"last": {
 					"contextWindow": 128000,
-					"estimatedInputTokens": 754,
+					"estimatedInputTokens": 930,
 					"reason": "fits",
 					"reservedOutputTokens": 16384,
-					"safetyTokens": 12800
+					"safetyTokens": 12800,
+					"wrapperOverheadTokens": 176
 				},
 				"unmeasured": 0,
 				"wouldReject": 0

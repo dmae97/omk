@@ -1,5 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+
+let nextLeaseTempSeq = 1;
+
 import { join } from "node:path";
 
 export const MULTI_SESSION_LEASE_SCHEMA_VERSION = 1 as const;
@@ -126,7 +128,7 @@ export class MultiSessionResourceLedger {
 		if (!record) throw new RangeError("invalid session resource lease payload");
 		mkdirSync(this.directory, { recursive: true, mode: 0o700 });
 		const targetPath = join(this.directory, `${record.sessionId}.json`);
-		const tempPath = join(this.directory, `.${record.sessionId}.${randomUUID()}.tmp`);
+		const tempPath = join(this.directory, `.${record.sessionId}.${process.pid}.${nextLeaseTempSeq++}.tmp`);
 		writeFileSync(tempPath, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
 		renameSync(tempPath, targetPath);
 		return record;

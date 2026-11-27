@@ -177,7 +177,7 @@ export class GoalAcceptance {
 				{
 					kind: "attach-evidence",
 					ref: latest.ref,
-					evidence: { id: result.receiptId, digest: result.digest, capturedAt },
+					evidence: { id: result.receiptId, digest: result.digest, capturedAt, verifiedBy: "goal-acceptance" },
 				},
 				nextDurableGoalTimestamp(latest, capturedAt),
 			);
@@ -257,7 +257,10 @@ export class GoalAcceptance {
 		const key = goalKeyOf(goal);
 		const contract = this.contracts.get(key);
 		if (contract === undefined) {
-			return (goal.evidence?.length ?? 0) > 0 || hasPersistedVerificationReceipts(cwd, key);
+			return (
+				Boolean(goal.evidence?.some((e) => e.verifiedBy === "goal-acceptance")) ||
+				hasPersistedVerificationReceipts(cwd, key)
+			);
 		}
 		if (contract.command !== undefined) return true;
 		for (const receipt of this.trusted.values()) if (receipt.goalKey === key) return true;

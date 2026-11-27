@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+let nextRegistryOwnerSeq = 1;
+
 import {
 	type Api,
 	type AssistantMessageEventStream,
@@ -18,7 +19,7 @@ import { registerOAuthProvider, unregisterOAuthProvider } from "omk-ai/oauth";
  * in the same process keep their custom providers intact.
  */
 export class ModelRegistryProviderOwnership {
-	private readonly ownerId = randomUUID();
+	private readonly ownerId = `mr-${nextRegistryOwnerSeq++}`;
 	private readonly ownedApiSourceIds = new Set<string>();
 	private readonly ownedOAuthProviderIds = new Set<string>();
 

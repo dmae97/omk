@@ -100,6 +100,7 @@ function attachEvidence(
 		digest: requireDigest(command.evidence.digest),
 		capturedAt,
 		goalGeneration: computeDurableGoalGeneration(current),
+		...(command.evidence.verifiedBy === "goal-acceptance" ? { verifiedBy: "goal-acceptance" as const } : {}),
 	};
 	return revise(current, now, { evidence: [...current.evidence, evidence] });
 }

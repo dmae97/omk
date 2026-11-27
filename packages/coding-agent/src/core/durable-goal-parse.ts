@@ -51,6 +51,7 @@ function parseEvidence(value: unknown): DurableGoalEvidence {
 		digest: requireDigest(value.digest),
 		capturedAt: requireTimestamp(value.capturedAt),
 		goalGeneration: requireDigest(value.goalGeneration),
+		...(value.verifiedBy === "goal-acceptance" ? { verifiedBy: "goal-acceptance" as const } : {}),
 	};
 }
 
