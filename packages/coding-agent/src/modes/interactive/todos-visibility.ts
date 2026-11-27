@@ -71,6 +71,7 @@ export interface FilesCommandTarget {
 	toggle(): void;
 	focus(): void;
 	startSearch(query: string): void;
+	expandMore?: () => boolean;
 	setMouseMode(enable: boolean): void;
 	isMouseEnabled(): boolean;
 	getSavedShowFilesSidebar(): boolean | undefined;
@@ -105,6 +106,13 @@ export function dispatchFilesCommand(target: FilesCommandTarget, arg: string): s
 	}
 	if (sub === "help" || sub === "status" || sub === "?") {
 		return formatFilesAndMouseHelp(target.getMode(), target.isMouseEnabled(), target.getSavedShowFilesSidebar());
+	}
+	if (sub === "more" || sub === "expand") {
+		const expanded = target.expandMore?.() ?? false;
+		target.focus();
+		return expanded
+			? "Expanded file explorer limit (press + or run /files more again for deeper scan)"
+			: "File explorer already at maximum scan limit (narrow query or open a subfolder)";
 	}
 	if (raw) {
 		target.startSearch(raw);

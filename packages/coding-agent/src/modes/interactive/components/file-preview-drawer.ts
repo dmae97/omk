@@ -2,7 +2,7 @@ import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
 import { formatCompactSize } from "../../../core/repo-files-fs.ts";
 import { singleLineDisplayText } from "../../../utils/display-text.ts";
 import { theme } from "../theme/theme.ts";
-import type { FilesSidebarModel } from "./files-sidebar-model.ts";
+import { computePreviewDrawerLayout, type FilesSidebarModel } from "./files-sidebar-model.ts";
 import { renderHairlineRule } from "./paper-hairline.ts";
 
 function padTo(text: string, width: number): string {
@@ -25,11 +25,10 @@ export class FilePreviewDrawerComponent implements Component {
 	render(width: number): string[] {
 		const preview = this.model.getPreview();
 		if (!preview || width < 20) return [];
-		const maxDrawerHeight = Math.max(6, Math.min(16, Math.floor(this.getRows() * 0.42)));
-		const bodyRows = Math.max(3, maxDrawerHeight - 2);
+		const { bodyRows } = computePreviewDrawerLayout(this.getRows());
 		const pathLabel = singleLineDisplayText(preview.path);
 		const contentLines = preview.blocked || preview.binary ? [] : preview.content.split(/\r?\n/);
-		const start = this.model.getPreviewScrollOffset();
+		const start = this.model.clampPreviewScroll(bodyRows);
 		const end = Math.min(contentLines.length, start + bodyRows);
 		const rangeLabel = contentLines.length > 0 ? ` · L${start + 1}-${end}/${contentLines.length}` : "";
 		const meta = `${formatCompactSize(preview.size)}${preview.truncated ? "+" : ""}${rangeLabel}`;

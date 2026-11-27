@@ -1,4 +1,5 @@
 import {
+	computePreviewDrawerLayout,
 	FILES_SIDEBAR_MIN_COLS,
 	FILES_SIDEBAR_MIN_ROWS,
 	type FilesSidebarModel,
@@ -178,16 +179,15 @@ export function handleFilesSidebarMouse(event: SgrMouseEvent, ctx: FilesSidebarM
 
 	// Click or scroll inside the bottom-right preview drawer when visible
 	if (model.getPreview() && termWidth >= FILES_SIDEBAR_MIN_COLS && termHeight >= FILES_SIDEBAR_MIN_ROWS) {
-		const drawerHeight = Math.max(6, Math.min(16, Math.floor(termHeight * 0.42)));
-		const drawerTop = termHeight - drawerHeight + 1;
+		const { drawerTop, bodyRows } = computePreviewDrawerLayout(termHeight);
 		if (event.col > gutter + 1 && event.row >= drawerTop) {
 			if (isWheelUp) {
-				model.scrollPreview(-3);
+				model.scrollPreview(-3, bodyRows);
 				ctx.onRequestRender();
 				return true;
 			}
 			if (isWheelDown) {
-				model.scrollPreview(3);
+				model.scrollPreview(3, bodyRows);
 				ctx.onRequestRender();
 				return true;
 			}

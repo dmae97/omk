@@ -24,6 +24,14 @@ export function renderCollapsedFilesRail(width: number, height: number, focused:
 }
 
 export function renderFilesContextualHints(model: FilesSidebarModel, focused: boolean): [string, string] {
+	const trunc = model.getTruncationStatus();
+	if (trunc.truncated) {
+		const line1 = theme.fg("warning", trunc.label);
+		const line2 = trunc.canExpand
+			? theme.fg("dim", "+ load more · / narrow path")
+			: theme.fg("dim", "/ filter or open subfolder");
+		return [line1, line2];
+	}
 	if (!focused) return [theme.fg("dim", "Alt+E browse · ^B hide"), theme.fg("dim", "/files <q> · click row")];
 	if (model.isFiltering())
 		return [theme.fg("muted", "↑↓ pick · ⏎ view · Tab @"), theme.fg("dim", "Type query · Esc clear")];
@@ -76,8 +84,9 @@ export function renderOpenFilesSidebar(
 	lines.push(rule);
 
 	const visibleRows = model.getVisibleRows();
+	const trunc = model.getTruncationStatus();
 	const filterVal = singleLineDisplayText(model.getFilter());
-	const countBadge = filterVal ? theme.fg("dim", ` ${visibleRows.length}`) : "";
+	const countBadge = filterVal ? theme.fg("dim", ` ${visibleRows.length}${trunc.truncated ? "+" : ""}`) : "";
 	const filterBudget = Math.max(4, inner - visibleWidth(countBadge));
 	const filterCore = model.isFiltering()
 		? `${theme.fg("accent", "/")} ${theme.fg("text", filterVal)}${theme.fg("accent", "█")}`
@@ -89,14 +98,27 @@ export function renderOpenFilesSidebar(
 
 	const bodyRows = Math.max(1, height - lines.length - 3);
 	onViewportRows(bodyRows);
-	model.syncScroll(bodyRows, visibleRows.length);
+	model.syncScrollForRender(bodyRows, visibleRows.length);
 	const start = model.getScrollOffset();
 	const slice = visibleRows.slice(start, start + bodyRows);
 
 	if (slice.length === 0) {
-		const emptyMsg = model.getErrorMessage() ?? (filterVal ? "No matching files" : "Empty directory");
-		lines.push(`${fitPad(` ${theme.fg("dim", singleLineDisplayText(emptyMsg))}`, inner)}${sep}`);
-		for (let i = 1; i < bodyRows; i++) lines.push(`${" ".repeat(inner)}${sep}`);
+		const err = model.getErrorMessage();
+		if (err) {
+			lines.push(`${fitPad(` ${theme.fg("dim", singleLineDisplayText(err))}`, inner)}${sep}`);
+			for (let i = 1; i < bodyRows; i++) lines.push(`${" ".repeat(inner)}${sep}`);
+		} else if (filterVal && trunc.truncated) {
+			lines.push(`${fitPad(` ${theme.fg("warning", `Partial scan (${trunc.cap ?? 1500} cap)`)}`, inner)}${sep}`);
+			if (bodyRows > 1) {
+				const hint = trunc.canExpand ? "Press + for deeper scan" : "Narrow query or subfolder";
+				lines.push(`${fitPad(` ${theme.fg("dim", hint)}`, inner)}${sep}`);
+			}
+			for (let i = 2; i < bodyRows; i++) lines.push(`${" ".repeat(inner)}${sep}`);
+		} else {
+			const emptyMsg = filterVal ? "No matching files" : "Empty directory";
+			lines.push(`${fitPad(` ${theme.fg("dim", emptyMsg)}`, inner)}${sep}`);
+			for (let i = 1; i < bodyRows; i++) lines.push(`${" ".repeat(inner)}${sep}`);
+		}
 	} else {
 		for (const row of slice) lines.push(`${renderFilesTreeRow(row, inner)}${sep}`);
 		for (let i = slice.length; i < bodyRows; i++) lines.push(`${" ".repeat(inner)}${sep}`);
