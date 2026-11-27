@@ -75,3 +75,14 @@ export function memorySpanCovered(record: MemoryScoreRecord, selected: readonly 
 	}
 	return false;
 }
+
+/** Monotonic freshness decay in [0.25, 1.0] over remaining TTL; expired records return 0. */
+export function memoryFreshnessDecay(
+	record: { readonly createdAt: number; readonly expiresAt: number },
+	nowMs: number,
+): number {
+	if (!Number.isFinite(nowMs) || nowMs >= record.expiresAt) return 0;
+	const ttl = Math.max(1, record.expiresAt - record.createdAt);
+	const remaining = Math.max(0, Math.min(ttl, record.expiresAt - nowMs));
+	return 0.25 + 0.75 * (remaining / ttl);
+}

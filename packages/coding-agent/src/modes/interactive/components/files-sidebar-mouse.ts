@@ -25,6 +25,54 @@ export function parseSgrMouse(data: string): SgrMouseEvent | null {
 	};
 }
 
+export function isSgrLeftPress(event: SgrMouseEvent): boolean {
+	return !event.release && (event.button & 64) === 0 && (event.button & 32) === 0 && (event.button & 0b11) === 0;
+}
+
+export function isSgrWheelUp(event: SgrMouseEvent): boolean {
+	return !event.release && (event.button & 64) !== 0 && (event.button & 0b11) === 0;
+}
+
+export function isSgrWheelDown(event: SgrMouseEvent): boolean {
+	return !event.release && (event.button & 64) !== 0 && (event.button & 0b11) === 1;
+}
+
+export function hasSgrFastScrollModifier(event: SgrMouseEvent): boolean {
+	return (event.button & (4 | 16)) !== 0;
+}
+
+const SGR_MOUSE_ON = "\x1b[?1000h\x1b[?1006h";
+const SGR_MOUSE_OFF = "\x1b[?1000l\x1b[?1006l";
+
+let mouseHooksRegistered = false;
+let mouseWanted = false;
+let mouseActive = false;
+
+export function setProcessMouseMode(enable: boolean, forceWrite = false): void {
+	mouseWanted = enable;
+	if (!process.stdout.isTTY || (!forceWrite && mouseActive === enable)) return;
+	mouseActive = enable;
+	try {
+		process.stdout.write(enable ? SGR_MOUSE_ON : SGR_MOUSE_OFF);
+	} catch {
+		mouseActive = false;
+	}
+}
+
+export function enableDefaultProcessMouseMode(): void {
+	if (!process.stdout.isTTY || process.env.OMK_TUI_MOUSE === "0") return;
+	if (!mouseHooksRegistered) {
+		mouseHooksRegistered = true;
+		process.once("exit", () => setProcessMouseMode(false));
+		if (process.platform !== "win32") {
+			process.on("SIGCONT", () => {
+				if (mouseWanted) setProcessMouseMode(true, true);
+			});
+		}
+	}
+	setProcessMouseMode(true);
+}
+
 export interface FilesSidebarMouseContext {
 	readonly model: FilesSidebarModel;
 	readonly termWidth: number;
@@ -46,10 +94,9 @@ export function handleFilesSidebarMouse(event: SgrMouseEvent, ctx: FilesSidebarM
 	const gutter = filesSidebarGutterWidth(model.getMode(), model.getWidth(), termWidth, termHeight);
 	if (gutter <= 0) return false;
 
-	const isLeftPress = !event.release && (event.button & 0b11) === 0 && (event.button & 64) === 0;
-	const isWheelUp = !event.release && event.button === 64;
-	const isWheelDown = !event.release && event.button === 65;
-
+	const isLeftPress = isSgrLeftPress(event);
+	const isWheelUp = isSgrWheelUp(event);
+	const isWheelDown = isSgrWheelDown(event);
 	// Click or scroll inside the left sidebar / collapsed rail
 	if (event.col >= 1 && event.col <= gutter) {
 		if (event.release) return true;

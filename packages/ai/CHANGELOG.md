@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] - 2026-11-26
+
+### Fixed
+
+- Defer heavy browser/runtime imports and cap in-memory caches for startup and long-session stability.
 
 ## [2.0.4] - 2026-11-23
 

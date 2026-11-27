@@ -1,5 +1,6 @@
 import type { Component, TUI } from "omk-tui";
 import type { SettingsManager } from "../../core/settings-manager.ts";
+import { setupChatWheelScroll } from "./components/chat-wheel-scroll.ts";
 import { FilePreviewDrawerComponent } from "./components/file-preview-drawer.ts";
 import { FilesSidebarComponent } from "./components/files-sidebar.ts";
 import {
@@ -9,7 +10,12 @@ import {
 	FilesSidebarModel,
 	filesSidebarGutterWidth,
 } from "./components/files-sidebar-model.ts";
-import { handleFilesSidebarMouse, parseSgrMouse } from "./components/files-sidebar-mouse.ts";
+import {
+	enableDefaultProcessMouseMode,
+	handleFilesSidebarMouse,
+	parseSgrMouse,
+	setProcessMouseMode,
+} from "./components/files-sidebar-mouse.ts";
 
 export interface FilesSidebarSetupOptions {
 	readonly ui: TUI;
@@ -32,29 +38,12 @@ export interface FilesSidebarController {
 	handleCommand(arg: string): string;
 }
 
-const SGR_MOUSE_ON = "\x1b[?1000h\x1b[?1006h";
-const SGR_MOUSE_OFF = "\x1b[?1000l\x1b[?1006l";
-
 export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSidebarController {
 	const { ui, settingsManager, getCwd, getEditor, insertTextIntoEditor, onStateChange } = options;
 	const initialMode: FilesSidebarMode = settingsManager.getShowFilesSidebar() ? "open" : "hidden";
 	const model = new FilesSidebarModel(getCwd(), initialMode);
-
-	let mouseActive = false;
-	const setMouseMode = (enable: boolean): void => {
-		if (!process.stdout.isTTY || mouseActive === enable) return;
-		mouseActive = enable;
-		try {
-			process.stdout.write(enable ? SGR_MOUSE_ON : SGR_MOUSE_OFF);
-		} catch {
-			mouseActive = false;
-		}
-	};
-
-	if (process.stdout.isTTY && process.env.OMK_TUI_MOUSE !== "0") {
-		setMouseMode(true);
-		process.once("exit", () => setMouseMode(false));
-	}
+	const setMouseMode = (enable: boolean): void => setProcessMouseMode(enable);
+	enableDefaultProcessMouseMode();
 
 	const syncCwdIfChanged = (): void => {
 		const cwd = getCwd();
@@ -77,6 +66,11 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 		return filesSidebarGutterWidth(model.getMode(), model.getWidth(), width, height);
 	};
 
+	const reservedLeftGutter = (width: number, height: number): number => {
+		const w = gutterWidth(width, height);
+		return w > 0 ? w + 1 : 0;
+	};
+
 	const sidebarVisible = (width: number, height: number): boolean => gutterWidth(width, height) > 0;
 
 	const sidebar = new FilesSidebarComponent(model, {
@@ -91,6 +85,14 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 	});
 
 	const preview = new FilePreviewDrawerComponent(model, () => ui.terminal.rows);
+
+	// Mount chat scroll overlay below sidebar/preview in focusOrder so side rails and preview stay on top.
+	const chatWheelScroll = setupChatWheelScroll({
+		ui,
+		getLeftGutter: reservedLeftGutter,
+		getEditor,
+		isSidebarFocused: () => sidebar.focused,
+	});
 
 	ui.showOverlay(sidebar, {
 		anchor: "top-left",
@@ -112,10 +114,7 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 			model.getPreview() !== null && width >= FILES_SIDEBAR_MIN_COLS && height >= FILES_SIDEBAR_MIN_ROWS,
 	});
 
-	ui.setLeftGutter((width, height) => {
-		const w = gutterWidth(width, height);
-		return w > 0 ? w + 1 : 0;
-	});
+	ui.setLeftGutter(reservedLeftGutter);
 
 	ui.addInputListener((data) => {
 		const mouse = parseSgrMouse(data);
@@ -136,6 +135,7 @@ export function setupFilesSidebar(options: FilesSidebarSetupOptions): FilesSideb
 		});
 		return consumed ? { consume: true } : undefined;
 	});
+	chatWheelScroll.attachInputListener();
 
 	const controller: FilesSidebarController = {
 		model,

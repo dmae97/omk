@@ -5,6 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { verifyArtifactReleaseGate } from "./lib/release-artifact-gate.mjs";
+export { verifyArtifactReleaseGate };
 // npm provenance attestations require a Sigstore-capable CI provider (GitHub
 // Actions). Local publishes fail with EUSAGE "Automatic provenance generation
 // not supported for provider: null", so provenance is attached automatically

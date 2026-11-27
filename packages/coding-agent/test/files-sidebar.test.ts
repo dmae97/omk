@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
@@ -71,6 +71,21 @@ describe("repo-files-fs and FilesSidebar TUI", () => {
 		expect(secretPreview.blocked).toBe(true);
 		const binPreview = readSafeRepoFile(root, "bin.dat");
 		expect(binPreview.binary).toBe(true);
+		expect(isSecretFileName(".npmrc")).toBe(true);
+		expect(isSecretFileName(".netrc")).toBe(true);
+		expect(isSecretFileName("secrets.yaml")).toBe(true);
+
+		const outsideDir = mkdtempSync(join(tmpdir(), "omk-outside-"));
+		try {
+			const outsideFile = join(outsideDir, "leak.txt");
+			writeFileSync(outsideFile, "top-secret-outside\n");
+			symlinkSync(outsideFile, join(root, "escape-link.txt"));
+			const listingWithLink = listRepoDirectory(root, "");
+			expect(listingWithLink.entries.some((e) => e.name === "escape-link.txt")).toBe(false);
+			expect(() => resolveSafeRepoPath(root, "escape-link.txt")).toThrow(/outside/i);
+		} finally {
+			rmSync(outsideDir, { recursive: true, force: true });
+		}
 	});
 
 	it("defaults showFilesSidebar to true and respects setting and env opt-out", () => {

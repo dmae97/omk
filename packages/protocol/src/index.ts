@@ -34,6 +34,15 @@ export {
 	type WitnessIndependencePolicy,
 	type WorkspaceCompleteness,
 } from "./claims/claim-types.ts";
+export {
+	type CompletionStatusContract,
+	type DeriveCompletionStatusInput,
+	deriveCompletionStatusContract,
+	type EffectiveCompletionStatus,
+	formatCompletionStatusBadge,
+	type PlanProgressStatus,
+	type VerificationEvidenceState,
+} from "./completion-state.ts";
 export { reduceRuntimeDecision } from "./decision.ts";
 export { evaluateTask, ProtocolInvariantError } from "./evaluation.ts";
 export {

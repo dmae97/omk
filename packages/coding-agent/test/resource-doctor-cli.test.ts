@@ -91,7 +91,7 @@ describe("runResourceDoctorCli", () => {
 		const { lines, writeLine } = collectLines();
 		const outcome = await runResourceDoctorCli(["doctor", "resources", "--help"], { writeLine });
 		expect(outcome).toEqual({ handled: true, exitCode: 0 });
-		expect(lines).toEqual(["Usage: omk doctor resources [--json] [--report]"]);
+		expect(lines).toEqual(["Usage: omk doctor resources [--json] [--report] [--fleet]"]);
 	});
 
 	it("renders a bounded historical report without probing the host", async () => {

@@ -1,10 +1,24 @@
 import type { OutputSnapshot } from "./output-accumulator.ts";
+import { compactToolOutput } from "./tool-output-compactor.ts";
+
+export {
+	compactToolOutput,
+	type ToolOutputCompactionOptions,
+	type ToolOutputCompactionResult,
+} from "./tool-output-compactor.ts";
+
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult } from "./truncate.ts";
 
 /** Keep raw-output links and truncation notices identical across filtered and ordinary results. */
-export function formatBashOutput(snapshot: OutputSnapshot, lastLineBytes: number, emptyText = "(no output)") {
+export function formatBashOutput(
+	snapshot: OutputSnapshot,
+	lastLineBytes: number,
+	emptyText = "(no output)",
+	options?: { readonly compact?: boolean },
+) {
 	const truncation = snapshot.truncation;
-	let text = snapshot.content || emptyText;
+	const rawContent = snapshot.content || emptyText;
+	let text = options?.compact && snapshot.content ? compactToolOutput(rawContent).text : rawContent;
 	let details:
 		| { truncation?: TruncationResult; fullOutputPath?: string; outputFilter?: OutputSnapshot["outputFilter"] }
 		| undefined;

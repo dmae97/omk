@@ -44,6 +44,12 @@ function readSymlink(path: string): string | undefined {
 	}
 }
 
+const GIT_HOOKS_SEGMENT = /(?:^|\/)\.git\/hooks(?:\/|$)/;
+
+function isProtectedGitHooksPath(canonicalPath: string): boolean {
+	return GIT_HOOKS_SEGMENT.test(canonicalPath.replace(/\\/g, "/"));
+}
+
 function isInside(root: string, candidate: string): boolean {
 	if (candidate === root) return true;
 	const rel = relative(root, candidate);
@@ -57,6 +63,12 @@ export function createWorkspaceWriteGuard(roots: readonly string[]): WorkspaceWr
 	}
 	return (absolutePath: string) => {
 		const candidate = canonicalizeForWrite(absolutePath);
+		if (isProtectedGitHooksPath(candidate)) {
+			return {
+				allowed: false,
+				reason: `resolves to ${candidate}, inside protected .git/hooks control directory.`,
+			};
+		}
 		if (canonicalRoots.some((root) => isInside(root, candidate))) return { allowed: true };
 		const where = canonicalRoots.length === 1 ? canonicalRoots[0] : canonicalRoots.join(", ");
 		return {

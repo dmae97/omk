@@ -55,14 +55,11 @@ const SAFE_SIMPLE_BINS: ReadonlySet<string> = new Set([
 	"stat",
 	"file",
 	"which",
-	"command",
-	"env",
 	"printenv",
 	"uname",
 	"date",
 	"du",
 	"df",
-	"sort",
 	"uniq",
 	"cut",
 	"jq",
@@ -99,8 +96,11 @@ const SAFE_HERDR_PAIRS: ReadonlySet<string> = new Set([
 ]);
 
 const MUTATING_GIT_BRANCH_FLAGS = /\s-(?:[dDmMcC]|delete|move|copy|force)\b/;
+const MUTATING_GIT_OUTPUT_FLAGS = /\s(?:--output(?:=|\s)|--ext-diff\b|--textconv\b)/;
 const MUTATING_FIND_FLAGS = /\s-(?:delete|exec|execdir|ok|okdir|fprint|fprintf|fls)\b/;
-const SHELL_REDIRECT_OR_SUBST = /(?:>>?|<<|\$\(|`|\btee\b|\bsed\s+-i\b|\bperl\s+-i\b)/;
+const MUTATING_SORT_FLAGS = /\s(?:-o\b|--output(?:=|\s))/;
+const SHELL_REDIRECT_OR_SUBST =
+	/(?:[\r\n]|>>?|<<|[<>]\(|\$\(|`|(?:^|[^&])&(?:[^&]|$)|\btee\b|\bsed\s+-i\b|\bperl\s+-i\b)/;
 
 export function isWriteToolName(toolName: string): boolean {
 	return MUTATING_TOOLS.has(toolName.toLowerCase());
@@ -120,8 +120,12 @@ function isSafeSegment(segment: string): boolean {
 	const tokens = trimmed.split(/\s+/);
 	const bin = tokens[0] ?? "";
 	if (SAFE_SIMPLE_BINS.has(bin)) return true;
+	if (bin === "env") return tokens.length === 1;
+	if (bin === "command") return tokens.length >= 2 && (tokens[1] === "-v" || tokens[1] === "-V");
+	if (bin === "sort") return !MUTATING_SORT_FLAGS.test(trimmed);
 	if (bin === "find") return !MUTATING_FIND_FLAGS.test(trimmed);
 	if (bin === "git") {
+		if (MUTATING_GIT_OUTPUT_FLAGS.test(trimmed)) return false;
 		let idx = 1;
 		while (idx < tokens.length && tokens[idx]?.startsWith("-")) {
 			const flag = tokens[idx]!;

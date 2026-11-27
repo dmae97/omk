@@ -70,6 +70,9 @@ export function decidePathAccess(
 	}
 
 	const candidate = resolvedDecisionPath(resolved) ?? request.path;
+	if (isSensitivePath(candidate)) {
+		return decision(false, "path.secret", "Resolved path targets a sensitive credential-like location.");
+	}
 	if (request.kind === "read") {
 		if (matchesAny(policy.filesystem.readDeny, candidate) || matchesAny(policy.filesystem.readDeny, request.path)) {
 			return decision(false, "path.read_deny", "Read path matches a deny rule.");

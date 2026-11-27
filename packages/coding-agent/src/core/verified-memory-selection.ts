@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import type { AgentMessage } from "omk-agent-core";
 import type { TokenCounterAdapter } from "./context-budget-token-counter.ts";
 import type { VerifiedMemoryRecord } from "./verified-memory-record.ts";
-import { memoryMarginalUtility, memoryMatches, memoryQueryTerms, memorySpanCovered } from "./verified-memory-score.ts";
+import {
+	memoryFreshnessDecay,
+	memoryMarginalUtility,
+	memoryMatches,
+	memoryQueryTerms,
+	memorySpanCovered,
+} from "./verified-memory-score.ts";
 
 function evidence(record: VerifiedMemoryRecord) {
 	return {
@@ -69,6 +75,7 @@ export function selectMemoryContext(
 	counter: TokenCounterAdapter,
 	modelId: string,
 	fits?: (messages: AgentMessage[]) => boolean,
+	nowMs?: number,
 ): {
 	messages: AgentMessage[];
 	selected: number;
@@ -99,7 +106,8 @@ export function selectMemoryContext(
 			item,
 			utility: memorySpanCovered(item.record, selected)
 				? 0
-				: memoryMarginalUtility(item.matches, seen, terms.length),
+				: memoryMarginalUtility(item.matches, seen, terms.length) *
+					(nowMs === undefined ? 1 : memoryFreshnessDecay(item.record, nowMs)),
 		}));
 		scored.sort(
 			(a, b) =>

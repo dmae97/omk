@@ -20,7 +20,10 @@ let cachedModelsFile: CachedModelsText | undefined;
 function readModelsJsonCached(modelsJsonPath: string): string | symbol {
 	try {
 		const st = statSync(modelsJsonPath, { bigint: true });
+		const nowNs = BigInt(Date.now()) * 1_000_000n;
+		const isRacy = nowNs - st.mtimeNs < 100_000_000n && st.mtimeNs <= nowNs + 100_000_000n;
 		if (
+			!isRacy &&
 			cachedModelsFile &&
 			cachedModelsFile.path === modelsJsonPath &&
 			cachedModelsFile.mtimeNs === st.mtimeNs &&
