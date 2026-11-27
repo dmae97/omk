@@ -91,6 +91,7 @@ and the [SWE-2 harness](../coding-agent/docs/devin-harness.md).
 - **Meta Model API** (Muse Spark over the OpenAI Responses API. `/login` → Muse Code runs the CLI device flow and mints the subscription key. `META_API_KEY` remains pay-as-you-go.)
 - **Xiaomi MiMo** (uses Anthropic-compatible API; defaults to API billing endpoint, with separate Token Plan providers for `cn`/`ams`/`sgp` regions)
 - **Zyloo** (OpenAI-compatible unified API gateway)
+- **LLMTR** (OpenAI-compatible prepaid gateway)
 - **Any OpenAI-compatible API**: Ollama, vLLM, LM Studio, etc.
 
 The generated NVIDIA NIM entry `z-ai/glm-5.2` explicitly enables `reasoning_effort`; its `max` thinking level is sent as `reasoning_effort: "max"`. Other NVIDIA models keep the provider's conservative compatibility defaults.
@@ -1178,6 +1179,7 @@ In Node.js environments, you can set environment variables to avoid passing API 
 | Xiaomi MiMo Token Plan (Amsterdam) | `XIAOMI_TOKEN_PLAN_AMS_API_KEY` |
 | Xiaomi MiMo Token Plan (Singapore) | `XIAOMI_TOKEN_PLAN_SGP_API_KEY` |
 | Zyloo | `ZYLOO_API_KEY` |
+| LLMTR | `LLMTR_API_KEY` |
 | GitHub Copilot | `COPILOT_GITHUB_TOKEN` |
 
 When set, the library automatically uses these keys:

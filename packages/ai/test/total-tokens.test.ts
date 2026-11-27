@@ -635,6 +635,25 @@ describe("totalTokens field", () => {
 		);
 	});
 
+	describe.skipIf(!process.env.LLMTR_API_KEY)("LLMTR", () => {
+		it(
+			"llmtr/qwen3-8-27b - should return totalTokens equal to sum of components",
+			{ retry: 3, timeout: 60000 },
+			async () => {
+				const llm = getModel("llmtr", "llmtr/qwen3-8-27b");
+
+				console.log(`\nLLMTR / ${llm.id}:`);
+				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.LLMTR_API_KEY });
+
+				logUsage("First request", first);
+				logUsage("Second request", second);
+
+				assertTotalTokensEqualsComponents(first);
+				assertTotalTokensEqualsComponents(second);
+			},
+		);
+	});
+
 	// =========================================================================
 	// OpenRouter - Multiple backend providers
 	// =========================================================================

@@ -1263,6 +1263,22 @@ describe("Generate E2E Tests", () => {
 		});
 	});
 
+	describe.skipIf(!process.env.LLMTR_API_KEY)("LLMTR Provider (Qwen 3.8 27B via OpenAI Completions)", () => {
+		const llm = getModel("llmtr", "llmtr/qwen3-8-27b");
+
+		it("should complete basic text generation", { retry: 3 }, async () => {
+			await basicTextGeneration(llm);
+		});
+
+		it("should handle tool calling", { retry: 3 }, async () => {
+			await handleToolCall(llm);
+		});
+
+		it("should handle streaming", { retry: 3 }, async () => {
+			await handleStreaming(llm);
+		});
+	});
+
 	// =========================================================================
 	// OAuth-based providers (credentials from ~/.omk/agent/oauth.json)
 	// Tokens are resolved at module level (see oauthTokens above)

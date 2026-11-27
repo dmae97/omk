@@ -914,6 +914,131 @@ async function fetchZylooModels(): Promise<Model<"openai-completions">[]> {
 	}
 }
 
+
+const LLMTR_BASE_URL = "https://llmtr.com/v1";
+
+const LLMTR_STATIC_MODELS: Model<"openai-completions">[] = [
+	{
+		id: "llmtr/qwen3-8-27b",
+		name: "Qwen 3.8 27B",
+		api: "openai-completions",
+		provider: "llmtr",
+		baseUrl: LLMTR_BASE_URL,
+		reasoning: true,
+		input: ["text"],
+		cost: { input: 5, output: 7, cacheRead: 1.25, cacheWrite: 0 },
+		contextWindow: 262144,
+		maxTokens: 262144,
+	},
+	{
+		id: "mistral/devstral-medium-latest",
+		name: "Devstral 2",
+		api: "openai-completions",
+		provider: "llmtr",
+		baseUrl: LLMTR_BASE_URL,
+		reasoning: false,
+		input: ["text", "image"],
+		cost: { input: 0.4, output: 2, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128000,
+		maxTokens: 128000,
+	},
+	{
+		id: "qwen/qwen3.8-flash",
+		name: "Qwen3.8-Flash",
+		api: "openai-completions",
+		provider: "llmtr",
+		baseUrl: LLMTR_BASE_URL,
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 0.15, output: 0.47, cacheRead: 0.016, cacheWrite: 0 },
+		contextWindow: 1000000,
+		maxTokens: 131072,
+	},
+	{
+		id: "qwen/qwen3.8-max",
+		name: "Qwen3.8-Max",
+		api: "openai-completions",
+		provider: "llmtr",
+		baseUrl: LLMTR_BASE_URL,
+		reasoning: true,
+		input: ["text", "image"],
+		cost: { input: 2, output: 6, cacheRead: 0.25, cacheWrite: 0 },
+		contextWindow: 1000000,
+		maxTokens: 131072,
+	},
+];
+
+async function fetchLlmtrModels(): Promise<Model<"openai-completions">[]> {
+	try {
+		console.log("Fetching models from LLMTR API...");
+		const headers: Record<string, string> = {};
+		const apiKey = process.env.LLMTR_API_KEY;
+		if (apiKey) {
+			headers.Authorization = `Bearer ${apiKey}`;
+		}
+		const response = await fetch(`${LLMTR_BASE_URL}/models`, {
+			headers,
+			signal: AbortSignal.timeout(30000),
+		});
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+		const data = (await response.json()) as {
+			data?: Array<{
+				id?: string;
+				name?: string;
+				supported_parameters?: string[];
+				architecture?: { input_modalities?: string[] };
+				reasoning?: unknown;
+				pricing?: {
+					prompt?: string;
+					completion?: string;
+					input_cache_read?: string;
+					input_cache_write?: string;
+				};
+				context_length?: number;
+				top_provider?: { max_completion_tokens?: number };
+			}>;
+		};
+
+		const models: Model<"openai-completions">[] = [];
+		for (const item of data.data ?? []) {
+			const id = item.id;
+			if (!id || typeof id !== "string") continue;
+			if (!item.supported_parameters?.includes("tools")) continue;
+
+			const input: ("text" | "image")[] = ["text"];
+			if ((item.architecture?.input_modalities ?? []).includes("image")) {
+				input.push("image");
+			}
+
+			models.push({
+				id,
+				name: item.name || id,
+				api: "openai-completions",
+				provider: "llmtr",
+				baseUrl: LLMTR_BASE_URL,
+				reasoning: Boolean(item.reasoning) || (item.supported_parameters?.includes("reasoning") ?? false),
+				input,
+				cost: {
+					input: catalogPricePerMillion(item.pricing?.prompt),
+					output: catalogPricePerMillion(item.pricing?.completion),
+					cacheRead: catalogPricePerMillion(item.pricing?.input_cache_read),
+					cacheWrite: catalogPricePerMillion(item.pricing?.input_cache_write),
+				},
+				contextWindow: item.context_length || 4096,
+				maxTokens: item.top_provider?.max_completion_tokens || item.context_length || 4096,
+			});
+		}
+
+		console.log(`Fetched ${models.length} tool-capable models from LLMTR`);
+		return models.length > 0 ? models : LLMTR_STATIC_MODELS;
+	} catch (error) {
+		console.error("Failed to fetch LLMTR models:", error);
+		return LLMTR_STATIC_MODELS;
+	}
+}
+
 async function loadModelsDevData(): Promise<Model<any>[]> {
 	try {
 		console.log("Fetching models from models.dev API...");
@@ -1856,6 +1981,7 @@ async function generateModels() {
 	const openRouterModels = await fetchOpenRouterModels();
 	const aiGatewayModels = await fetchAiGatewayModels();
 	const zylooModels = await fetchZylooModels();
+	const llmtrModels = await fetchLlmtrModels();
 	const openCodeGoModels = await fetchOpenCodeGoModels();
 	const experientialModels = await experientialModelsOrCommitted(fetchExperientialModels, MODELS);
 
@@ -1866,6 +1992,7 @@ async function generateModels() {
 		...openRouterModels,
 		...aiGatewayModels,
 		...zylooModels,
+		...llmtrModels,
 	].filter(
 		(model) =>
 			!((model.provider === "opencode" || model.provider === "opencode-go") && model.id === "gpt-5.3-codex-spark") &&

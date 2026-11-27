@@ -41,6 +41,7 @@ const builtInDefaultModelPerProvider = {
 	"xiaomi-token-plan-ams": "mimo-v2.5-pro",
 	"xiaomi-token-plan-sgp": "mimo-v2.5-pro",
 	zyloo: "claude-opus-4-7",
+	llmtr: "llmtr/qwen3-8-27b",
 	cursor: "default",
 	workbuddy: "auto",
 } satisfies Record<KnownProvider, string>;
