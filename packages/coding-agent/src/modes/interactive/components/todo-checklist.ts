@@ -23,12 +23,19 @@ const STATUS_ICON_COLOR: Record<TodoItem["status"], ThemeColor> = {
  * State is pulled from an injected getter so the panel always reflects the
  * latest todo list. Coloring is suppressed (plain text) when `NO_COLOR` is set.
  */
+export interface TodoChecklistDisplayOptions {
+	readonly isHidden?: () => boolean;
+	readonly showToggleButton?: boolean;
+}
+
 export class TodoChecklistComponent implements Component {
 	private readonly stateGetter: () => TodoState;
+	private readonly options: TodoChecklistDisplayOptions;
 	private lastState: TodoState = EMPTY_TODO_STATE;
 
-	constructor(stateGetter: () => TodoState) {
+	constructor(stateGetter: () => TodoState, options: TodoChecklistDisplayOptions = {}) {
 		this.stateGetter = stateGetter;
+		this.options = options;
 	}
 
 	/** Clear the cached snapshot. Output is recomputed on the next render. */
@@ -53,8 +60,13 @@ export class TodoChecklistComponent implements Component {
 		}
 
 		const counts = summary(state);
+		const hidden = this.options.isHidden?.() === true;
+		if (hidden) {
+			return [this.headerDivider(width, counts.done, counts.total, true)];
+		}
+
 		const lines: string[] = [];
-		lines.push(this.headerDivider(width, counts.done, counts.total));
+		lines.push(this.headerDivider(width, counts.done, counts.total, false));
 		for (const item of state.items) {
 			lines.push(this.itemLine(width, item));
 		}
@@ -85,12 +97,23 @@ export class TodoChecklistComponent implements Component {
 		return truncateToWidth(line, width, "");
 	}
 
-	private headerDivider(width: number, done: number, total: number): string {
-		const labelPlain = `TODO  [${done}/${total}]`;
+	private headerDivider(width: number, done: number, total: number, hidden = false): string {
+		const hiddenTag = hidden ? " (hidden)" : "";
+		const labelPlain = `TODO  [${done}/${total}]${hiddenTag}`;
 		const prefix = this.color("border", "+-- ");
-		const coloredLabel = `${this.boldColor("accent", "TODO")}  ${this.color("muted", `[${done}/${total}]`)}`;
+		const coloredLabel = `${this.boldColor("accent", "TODO")}  ${this.color("muted", `[${done}/${total}]${hiddenTag}`)}`;
 		const visiblePrefix = visibleWidth("+-- ");
 		const labelWidth = visibleWidth(labelPlain);
+		if (this.options.showToggleButton) {
+			const buttonPlain = hidden ? "[Show]" : "[Hide]";
+			const buttonColored = this.color("accent", buttonPlain);
+			const buttonWidth = visibleWidth(buttonPlain);
+			const fillWidth = Math.max(1, width - visiblePrefix - labelWidth - buttonWidth - 2);
+			return this.clipLine(
+				`${prefix}${coloredLabel}${this.color("border", ` ${"-".repeat(fillWidth)} `)}${buttonColored}`,
+				width,
+			);
+		}
 		const fillWidth = Math.max(0, width - visiblePrefix - labelWidth - 1);
 		return this.clipLine(`${prefix}${coloredLabel}${this.color("border", ` ${"-".repeat(fillWidth)}`)}`, width);
 	}

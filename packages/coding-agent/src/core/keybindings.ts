@@ -27,6 +27,7 @@ export interface AppKeybindings {
 	"app.sidebar.toggle": true;
 	"app.files.toggle": true;
 	"app.files.focus": true;
+	"app.todos.toggle": true;
 	"app.thinking.toggle": true;
 	"app.session.toggleNamedFilter": true;
 	"app.editor.external": true;
@@ -97,6 +98,7 @@ export const KEYBINDINGS = {
 	},
 	"app.files.toggle": { defaultKeys: ["ctrl+b", "alt+b"], description: "Toggle left repository files sidebar" },
 	"app.files.focus": { defaultKeys: "alt+e", description: "Focus repository files sidebar" },
+	"app.todos.toggle": { defaultKeys: "alt+t", description: "Hide or show TODO checklist" },
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",
 		description: "Toggle thinking blocks",

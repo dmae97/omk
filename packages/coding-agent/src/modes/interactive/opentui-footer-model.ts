@@ -84,16 +84,27 @@ export function ansiToSpans(line: string): FooterSpan[] {
 }
 
 /** The native footer rows plus its stats row split at the padding. */
-export type RenderedFooter = { lines: string[]; statsLeft: string; statsRight: string };
+export type RenderedFooter = {
+	lines: string[];
+	statsLeft: string;
+	statsRight: string;
+	pwdLeft?: string;
+	pwdRight?: string;
+};
 
-/** OpenTUI rows for a rendered footer; the stats row keeps the model/provider as its right-aligned side. */
-export function footerPanelModel({ lines, statsLeft, statsRight }: RenderedFooter, text: string): FooterPanelModel {
+/** OpenTUI rows for a rendered footer; row 0 keeps the optional Todos toggle on the right, row 1 keeps model/provider. */
+export function footerPanelModel(
+	{ lines, statsLeft, statsRight, pwdLeft, pwdRight }: RenderedFooter,
+	text: string,
+): FooterPanelModel {
 	return {
 		text,
 		lines: lines.map((line, index) =>
-			index === 1
-				? { left: ansiToSpans(statsLeft), right: ansiToSpans(statsRight) }
-				: { left: ansiToSpans(line), right: [] },
+			index === 0 && pwdLeft !== undefined
+				? { left: ansiToSpans(pwdLeft), right: ansiToSpans(pwdRight ?? "") }
+				: index === 1
+					? { left: ansiToSpans(statsLeft), right: ansiToSpans(statsRight) }
+					: { left: ansiToSpans(line), right: [] },
 		),
 	};
 }

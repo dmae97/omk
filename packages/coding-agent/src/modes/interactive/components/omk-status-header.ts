@@ -30,6 +30,7 @@ export interface OmkStatusHeaderSnapshot {
 	readonly mcpTotal: number;
 	readonly herdrActive: boolean;
 	readonly filesSidebarMode?: "open" | "collapsed" | "hidden";
+	readonly todosVisible?: boolean;
 }
 
 const ANSI_SGR_RE = /\x1b\[[0-9;]*m/g;
@@ -99,7 +100,9 @@ export function renderOmkStatusHeader(snapshot: OmkStatusHeaderSnapshot, width: 
 			: snapshot.filesSidebarMode === "collapsed"
 				? `${theme.fg("dim", "◧ Files ▸")}  `
 				: "";
-	const title = `${filesChip}${theme.fg("accent", "◉")} ${theme.bold(theme.fg("text", "OMK · STATUS"))}`;
+	const todosChip =
+		snapshot.todosVisible === false ? `${theme.fg("dim", "☐ Todos ▸")}  ` : `${theme.fg("muted", "☑ Todos ▾")}  `;
+	const title = `${filesChip}${todosChip}${theme.fg("accent", "◉")} ${theme.bold(theme.fg("text", "OMK · STATUS"))}`;
 	if (width < 88) {
 		const rightTop = theme.fg("dim", `v${version}`);
 		const segs = [theme.fg("text", modelWithThink), runToken];
@@ -144,8 +147,8 @@ export function renderOmkStatusHeader(snapshot: OmkStatusHeaderSnapshot, width: 
 	const hints = theme.fg(
 		"dim",
 		snapshot.filesSidebarMode
-			? "/plan · /branch · /files · ctrl+b files · ctrl+o details · ctrl+q rail"
-			: "/plan · /branch · /resume · ctrl+o details · ctrl+q rail",
+			? "/plan · /branch · /files · /todos · ctrl+b files · alt+t todos · ctrl+q rail"
+			: "/plan · /branch · /todos · alt+t todos · ctrl+o details · ctrl+q rail",
 	);
 
 	return [
@@ -186,6 +189,7 @@ export function createOmkStatusHeader(
 	footerData: ReadonlyFooterDataProvider,
 	isInViewport: () => boolean,
 	getFilesSidebarMode?: () => "open" | "collapsed" | "hidden",
+	getTodosVisible?: () => boolean,
 ): OmkStatusHeaderComponent {
 	return new OmkStatusHeaderComponent(() => {
 		const session = getSession();
@@ -212,6 +216,7 @@ export function createOmkStatusHeader(
 			mcpTotal: mcpStatuses.length,
 			herdrActive: resolveHerdrConfig() !== undefined,
 			filesSidebarMode: getFilesSidebarMode?.(),
+			todosVisible: getTodosVisible?.() ?? true,
 		};
 	}, isInViewport);
 }

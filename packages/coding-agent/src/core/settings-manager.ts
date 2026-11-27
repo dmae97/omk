@@ -189,6 +189,7 @@ export interface Settings {
 	showHardwareCursor?: boolean; // Show terminal cursor while still positioning it for IME
 	pinStatusSidebar?: boolean; // Pin the bottom-bar status as a fixed right sidebar (opencode-style rail with MCP list)
 	showFilesSidebar?: boolean; // Show left repository files explorer sidebar by default (Ctrl+B / Alt+B)
+	showTodos?: boolean; // Show TODO checklist widget above editor by default (Alt+T / /todos / click Todos chip)
 	subscriptionUsageProviders?: string[]; // Global-only usage-rail allowlist; omitted shows all configured groups
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
@@ -1298,6 +1299,14 @@ export class SettingsManager {
 	setShowFilesSidebar(show: boolean): void {
 		this.globalSettings.showFilesSidebar = show;
 		this.markModified("showFilesSidebar");
+		this.save();
+	}
+	getShowTodos(): boolean {
+		return this.settings.showTodos ?? process.env.OMK_SHOW_TODOS !== "0";
+	}
+	setShowTodos(show: boolean): void {
+		this.globalSettings.showTodos = show;
+		this.markModified("showTodos");
 		this.save();
 	}
 

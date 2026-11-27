@@ -1,10 +1,9 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
 import { type Component, truncateToWidth, visibleWidth } from "omk-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import type { PiPackageIntakeSummary } from "../../../core/pi-package-intake.ts";
 import { type ContextPressure, contextPressure } from "../control-plane-view-model.ts";
 import { theme } from "../theme/theme.ts";
+import { formatFooterPwdRowWithTodosChip } from "../todos-visibility.ts";
 import { FooterMetricsTimer } from "./footer-metrics-timer.ts";
 
 /** Context percentage colour per pressure band; normal and unknown stay uncoloured. */
@@ -22,64 +21,15 @@ function sanitizeStatusText(text: string): string {
 		.trim();
 }
 
-/**
- * Format token counts for compact footer display.
- */
-export function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1000000) return `${Math.round(count / 1000)}k`;
-	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
-	return `${Math.round(count / 1000000)}M`;
-}
+import {
+	formatBytes,
+	formatCwdForFooter,
+	formatEndpointForFooter,
+	formatPackageIntake,
+	formatTokens,
+} from "./footer-format.ts";
 
-/**
- * Format byte counts for compact footer display.
- */
-export function formatBytes(bytes: number): string {
-	if (bytes < 1024) return `${bytes}B`;
-	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}K`;
-	if (bytes < 1024 * 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))}M`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
-}
-
-export function formatPackageIntake(summary: PiPackageIntakeSummary): string {
-	const ready =
-		summary.acceptedNative + summary.acceptedReference + summary.acceptedMeasurement + summary.acceptedAdvisory;
-	const review = summary.deferred + summary.reject;
-	return `PKG ${ready}/${summary.total} R${review} B${summary.hardForkBlocked}`;
-}
-
-export function formatCwdForFooter(cwd: string, home: string | undefined): string {
-	if (!home) return cwd;
-
-	const resolvedCwd = resolve(cwd);
-	const resolvedHome = resolve(home);
-	const relativeToHome = relative(resolvedHome, resolvedCwd);
-	const isInsideHome =
-		relativeToHome === "" ||
-		(relativeToHome !== ".." && !relativeToHome.startsWith(`..${sep}`) && !isAbsolute(relativeToHome));
-
-	if (!isInsideHome) return cwd;
-	return relativeToHome === "" ? "~" : `~${sep}${relativeToHome}`;
-}
-
-/**
- * Extract the provider endpoint host from a model base URL for footer display.
- * Returns undefined when the URL is missing or unparsable so callers can fall
- * back to provider-only display.
- */
-export function formatEndpointForFooter(baseUrl: string | undefined): string | undefined {
-	if (!baseUrl) return undefined;
-	try {
-		let hostname = new URL(baseUrl).hostname;
-		// Aliyun hosts carry a long shared suffix that adds no information in a rail.
-		if (hostname.endsWith(".aliyuncs.com")) hostname = hostname.slice(0, -".aliyuncs.com".length);
-		return hostname || undefined;
-	} catch {
-		return undefined;
-	}
-}
+export { formatBytes, formatCwdForFooter, formatEndpointForFooter, formatPackageIntake, formatTokens };
 
 /**
  * Footer component that shows pwd, token stats, and context usage.
@@ -88,6 +38,11 @@ export function formatEndpointForFooter(baseUrl: string | undefined): string | u
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private showSystemMetrics = false;
+	private getTodosVisible?: () => boolean;
+
+	setTodosVisibilityGetter(getter: (() => boolean) | undefined): void {
+		this.getTodosVisible = getter;
+	}
 	private readonly metricsTimer = new FooterMetricsTimer();
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
@@ -307,7 +262,19 @@ export class FooterComponent implements Component {
 			}
 		}
 
-		const pwdLine = truncateToWidth(metaSegments.join(metaDot), width, theme.fg("dim", "…"));
+		const { pwdLine, pwdLeft, pwdRight } = this.getTodosVisible
+			? formatFooterPwdRowWithTodosChip(
+					metaSegments.join(metaDot),
+					width,
+					minPadding,
+					this.getTodosVisible(),
+					truncateToWidth,
+				)
+			: {
+					pwdLine: truncateToWidth(metaSegments.join(metaDot), width, theme.fg("dim", "…")),
+					pwdLeft: "",
+					pwdRight: "",
+				};
 		const lines = [pwdLine, statsLine];
 
 		const extensionStatuses = this.footerData.getExtensionStatuses();
@@ -322,6 +289,6 @@ export class FooterComponent implements Component {
 			}
 		}
 
-		return { lines, statsLeft, statsRight: styledRight };
+		return { lines, statsLeft, statsRight: styledRight, ...(pwdRight ? { pwdLeft, pwdRight } : {}) };
 	}
 }
