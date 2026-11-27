@@ -139,9 +139,41 @@ export async function copyToClipboard(text: string): Promise<void> {
 		}
 	}
 
+	const hadLocalCopy = copied;
 	if (remote || !copied) {
 		const osc52Copied = emitOsc52(text);
 		copied = copied || osc52Copied;
+		if (p === "linux" && !hadLocalCopy && (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP)) {
+			const wslExit = await new Promise<number>((resolve) => {
+				const proc = spawn(
+					"powershell.exe",
+					[
+						"-NoProfile",
+						"-NonInteractive",
+						"-Command",
+						"[Console]::InputEncoding = [System.Text.Encoding]::UTF8; [Console]::In.ReadToEnd() | Set-Clipboard",
+					],
+					{ stdio: ["pipe", "ignore", "ignore"] },
+				);
+				let settled = false;
+				const finish = (code: number) => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					resolve(code);
+				};
+				const timer = setTimeout(() => {
+					proc.kill("SIGKILL");
+					finish(1);
+				}, options.timeout);
+				proc.on("error", () => finish(1));
+				proc.on("close", (code) => finish(code ?? 1));
+				proc.stdin.on("error", () => {});
+				proc.stdin.write(text);
+				proc.stdin.end();
+			});
+			if (wslExit === 0) copied = true;
+		}
 	}
 
 	if (!copied) {

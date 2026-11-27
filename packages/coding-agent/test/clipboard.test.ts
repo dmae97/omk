@@ -203,4 +203,38 @@ describe("copyToClipboard", () => {
 		await expect(copyToClipboard("x".repeat(80_000))).rejects.toThrow("Failed to copy to clipboard");
 		expect(osc52Writes()).toHaveLength(0);
 	});
+
+	test("falls back to OSC 52 and PowerShell UTF-8 Set-Clipboard on WSL when Linux clipboard tools are missing", async () => {
+		mockedPlatform.mockReturnValue("linux");
+		vi.stubEnv("WSL_DISTRO_NAME", "Ubuntu-24.04");
+		vi.stubEnv("WAYLAND_DISPLAY", "");
+		vi.stubEnv("DISPLAY", "");
+
+		const writes: string[] = [];
+		const proc = {
+			on: vi.fn((event: string, cb: (code?: number) => void) => {
+				if (event === "close") queueMicrotask(() => cb(0));
+				return proc;
+			}),
+			stdin: {
+				on: vi.fn(),
+				write: vi.fn((chunk: string) => {
+					writes.push(chunk);
+				}),
+				end: vi.fn(),
+			},
+			kill: vi.fn(),
+		} as unknown as ReturnType<typeof spawn>;
+		mockedSpawn.mockReturnValue(proc);
+
+		await copyToClipboard("안녕하세요 OMK");
+
+		expect(osc52Writes()).toEqual([`\x1b]52;c;${Buffer.from("안녕하세요 OMK").toString("base64")}\x07`]);
+		expect(mockedSpawn).toHaveBeenCalledWith(
+			"powershell.exe",
+			expect.arrayContaining(["-NoProfile", "-NonInteractive", "-Command"]),
+			{ stdio: ["pipe", "ignore", "ignore"] },
+		);
+		expect(writes).toEqual(["안녕하세요 OMK"]);
+	});
 });
