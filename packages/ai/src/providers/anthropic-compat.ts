@@ -2,7 +2,7 @@ import { getModels } from "../models.ts";
 import type { AnthropicMessagesCompat, Api, Model } from "../types.ts";
 
 export const SERVER_SIDE_FALLBACK_BETA = "server-side-fallback-2026-07-01";
-const SERVER_SIDE_FALLBACK_MODEL = /^claude-(?:fable-5(?:-[12])?|opus-5(?:-5)?|sonnet-5-5)$/;
+const SERVER_SIDE_FALLBACK_MODEL = /^claude-(?:fable-5(?:-[12])?|opus-5(?:-[56])?|sonnet-5-5)$/;
 
 export function supportsServerSideFallback(model: Model<"anthropic-messages">): boolean {
 	if (model.provider !== "anthropic" || !SERVER_SIDE_FALLBACK_MODEL.test(model.id)) return false;
@@ -16,8 +16,8 @@ export function supportsServerSideFallback(model: Model<"anthropic-messages">): 
 export function getAnthropicCompat(
 	model: Model<"anthropic-messages">,
 ): Required<Omit<AnthropicMessagesCompat, "forceAdaptiveThinking">> {
-	// Fable and Opus 5.5 reject `thinking.type.disabled`; every other Anthropic model accepts it.
-	const rejectsDisabledThinking = /(^|[/.])claude-(?:fable-|opus-5(?:\.5|-5)(?:[^\d]|$))/.test(model.id);
+	// Fable and Opus 5.5+ reject `thinking.type.disabled`; every other Anthropic model accepts it.
+	const rejectsDisabledThinking = /(^|[/.])claude-(?:fable-|opus-5(?:\.[56]|-[56])(?:[^\d]|$))/.test(model.id);
 	const isFireworks = model.provider === "fireworks";
 	const isCloudflareAiGatewayAnthropic =
 		model.provider === "cloudflare-ai-gateway" && model.baseUrl.includes("anthropic");

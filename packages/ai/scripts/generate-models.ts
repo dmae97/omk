@@ -2040,6 +2040,27 @@ async function generateModels() {
 		});
 	}
 
+	// Add Claude Opus 5.6 (unreleased placeholder; zero cost until Anthropic publishes official pricing).
+	if (!allModels.some(m => m.provider === "anthropic" && m.id === "claude-opus-5-6")) {
+		allModels.push({
+			id: "claude-opus-5-6",
+			name: "Claude Opus 5.6",
+			api: "anthropic-messages",
+			baseUrl: "https://api.anthropic.com",
+			provider: "anthropic",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+			},
+			contextWindow: 1000000,
+			maxTokens: 128000,
+		});
+	}
+
 	// Add missing Claude Sonnet 4.6
 	if (!allModels.some(m => m.provider === "anthropic" && m.id === "claude-sonnet-4-6")) {
 		allModels.push({
