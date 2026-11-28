@@ -22,8 +22,8 @@ describe("parseNativePhaseDeadline", () => {
 		expect(Object.isFrozen(parsed)).toBe(true);
 
 		const maxSafe = parseNativePhaseDeadline({
-			bootId: VALID_BOOT_ID,
 			deadlineMs: Number.MAX_SAFE_INTEGER,
+			bootId: VALID_BOOT_ID,
 		});
 		expect(maxSafe).toEqual({
 			bootId: VALID_BOOT_ID,
